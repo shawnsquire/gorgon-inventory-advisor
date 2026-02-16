@@ -35,13 +35,13 @@ export function generateTextPlan(items: AnalyzedItem[], characterName: string): 
 
     // Sort by vault then name
     group.sort((a, b) =>
-      a.StorageVault.localeCompare(b.StorageVault) || a.Name.localeCompare(b.Name),
+      (a.StorageVault ?? '').localeCompare(b.StorageVault ?? '') || a.Name.localeCompare(b.Name),
     );
 
     let currentVault = '';
     for (const item of group) {
-      if (item.StorageVault !== currentVault) {
-        currentVault = item.StorageVault;
+      if ((item.StorageVault ?? '') !== currentVault) {
+        currentVault = item.StorageVault ?? '';
         lines.push(`  [${currentVault}]`);
       }
 

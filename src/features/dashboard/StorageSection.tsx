@@ -9,7 +9,7 @@ import { Card } from '@/shared/components/Card';
 import { ProgressBar } from '@/shared/components/ProgressBar';
 import { getVaultShortName } from '@/shared/utils/friendlyNames';
 import { countByVault } from '@/shared/utils/itemHelpers';
-import { favorRank, favorLabel, favorColor, meetsRequiredFavor } from '@/shared/utils/favor';
+import { favorLabel, favorColor, meetsRequiredFavor } from '@/shared/utils/favor';
 
 type AnalyzedItem = InventoryItem & { recommendation: Recommendation };
 
@@ -189,11 +189,11 @@ export function StorageSection({ analyzed, indexes, character }: Props) {
 }
 
 /** Extract the NPC ID from a vault key. Vault keys often match NPC InternalNames or contain the NPC name. */
-function getNpcIdForVault(vaultKey: string, vault: CdnStorageVault): string | null {
+function getNpcIdForVault(_vaultKey: string, vault: CdnStorageVault): string | null {
   // RequiredFavor is Record<npcId, favorLevel> — first key is the NPC
   if (vault.RequiredFavor) {
     const npcIds = Object.keys(vault.RequiredFavor);
-    if (npcIds.length > 0) return npcIds[0];
+    if (npcIds.length > 0) return npcIds[0] ?? null;
   }
   // Fallback: try to match NpcFriendlyName in character NPCs
   return null;

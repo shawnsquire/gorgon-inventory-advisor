@@ -17,7 +17,7 @@ export interface GiftSuggestion {
  * filtered by character favor levels.
  */
 export function analyzeGiftPotential(
-  item: InventoryItem,
+  _item: InventoryItem,
   cdnItem: CdnItem | undefined,
   character: CharacterExport,
   indexes: GameDataIndexes,

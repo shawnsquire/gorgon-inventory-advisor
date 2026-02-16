@@ -118,7 +118,7 @@ export function categorizeItem(
  */
 export function getHeuristicRecommendation(
   item: InventoryItem,
-  cdnItem: CdnItem | undefined,
+  _cdnItem: CdnItem | undefined,
   character: CharacterExport,
   category: ItemCategory,
   keepQuantities: Record<string, number>,

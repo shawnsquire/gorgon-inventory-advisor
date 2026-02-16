@@ -17,7 +17,7 @@ export const ItemRow = memo(function ItemRow({ item, onItemClick, indexes }: Pro
   const rec = item.recommendation;
   const totalValue = item.Value * item.StackSize;
   const gearSkills = item.Slot ? getGearSkills(item, indexes) : [];
-  const vaultName = getVaultShortName(item.StorageVault, indexes);
+  const vaultName = getVaultShortName(item.StorageVault ?? '', indexes);
   const cdnItem = indexes.itemsByTypeId.get(item.TypeID);
 
   return (

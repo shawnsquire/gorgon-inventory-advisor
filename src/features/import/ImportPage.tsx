@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DropZone } from './DropZone';
-import { processFiles, type ProcessedFile } from './importActions';
+import { processFiles } from './importActions';
 import { useAppStore } from '@/lib/store';
 import type { InventoryExport } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';

@@ -210,7 +210,7 @@ export function getRecommendation(
 
 function evaluateEquipment(
   item: InventoryItem,
-  cdnItem: CdnItem | undefined,
+  _cdnItem: CdnItem | undefined,
   character: CharacterExport,
   indexes: GameDataIndexes,
   build: BuildConfig,
