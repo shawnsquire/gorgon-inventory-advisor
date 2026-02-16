@@ -45,6 +45,15 @@ export function getNpcDisplayName(npcId: string, indexes: GameDataIndexes | null
     .replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
+/** "AreaSerbule" -> "Serbule", "AreaKurMountains" -> "Kur Mountains", "*" -> "Portable" */
+export function formatArea(area: string): string {
+  if (area === '*') return 'Portable';
+  const stripped = area.replace(/^Area/, '');
+  return stripped
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
+}
+
 /**
  * Get a short vault label (for chips/badges).
  */
