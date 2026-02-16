@@ -1,0 +1,11 @@
+node_modules
+dist
+dev-dist
+*.local
+.DS_Store
+.claude/
+.playwright-mcp/
+console-errors.log
+*.png
+!public/**/*.png
+specs/

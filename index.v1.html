@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gorgon Inventory Advisor</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+:root {
+  --bg-dark: #0d0f14;
+  --bg-panel: #13161d;
+  --bg-card: #1a1e28;
+  --bg-hover: #222736;
+  --border: #2a2f3d;
+  --border-light: #363c4e;
+  --text: #c8cdd8;
+  --text-dim: #6b7280;
+  --text-bright: #e8ecf4;
+  --accent-green: #34d399;
+  --accent-green-dim: #065f46;
+  --accent-red: #f87171;
+  --accent-red-dim: #7f1d1d;
+  --accent-yellow: #fbbf24;
+  --accent-yellow-dim: #78350f;
+  --accent-blue: #60a5fa;
+  --accent-blue-dim: #1e3a5f;
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: #3b1f7a;
+  --accent-orange: #fb923c;
+  --accent-orange-dim: #7c2d12;
+  --accent-cyan: #22d3ee;
+  --rarity-common: #9ca3af;
+  --rarity-uncommon: #4ade80;
+  --rarity-rare: #60a5fa;
+  --rarity-exceptional: #c084fc;
+  --rarity-epic: #f59e0b;
+  --rarity-legendary: #f97316;
+  --font-display: 'Cinzel', serif;
+  --font-body: 'Source Sans 3', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-dark);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(52, 211, 153, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(96, 165, 250, 0.03) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root { position: relative; z-index: 1; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+input, select, button, textarea {
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+// ============================================================
+// RULES ENGINE — Default item knowledge base
+// ============================================================
+
+const ITEM_CATEGORIES = {
+  EQUIPMENT: 'Equipment',
+  CONSUMABLE: 'Consumable',
+  CRAFTING_MAT: 'Crafting Material',
+  RECIPE: 'Recipe Scroll',
+  GEM: 'Gem',
+  QUEST_ITEM: 'Quest Item',
+  FOOD_INGREDIENT: 'Food Ingredient',
+  POTION: 'Potion',
+  CURRENCY: 'Currency/Misc',
+  TOOL: 'Tool',
+  FUN: 'Fun/Event',
+  PHLOGISTON: 'Phlogiston',
+  JUNK: 'Junk',
+  GARDENING: 'Gardening',
+  ANIMAL_PART: 'Animal Part',
+  KEY: 'Key/Access',
+  AUGMENT: 'Augment',
+  WORK_ORDER: 'Work Order',
+  PAINTING: 'Painting',
+};
+
+const ACTIONS = {
+  KEEP: { label: 'Keep', color: 'var(--accent-green)', bg: 'var(--accent-green-dim)', icon: '✓' },
+  SELL_SOME: { label: 'Sell Some', color: 'var(--accent-yellow)', bg: 'var(--accent-yellow-dim)', icon: '↓' },
+  SELL_ALL: { label: 'Sell All', color: 'var(--accent-red)', bg: 'var(--accent-red-dim)', icon: '✕' },
+  DISENCHANT: { label: 'Distill', color: 'var(--accent-purple)', bg: 'var(--accent-purple-dim)', icon: '⚗' },
+  USE: { label: 'Use/Eat', color: 'var(--accent-cyan)', bg: 'rgba(34,211,238,0.12)', icon: '◉' },
+  QUEST: { label: 'Quest Item', color: 'var(--accent-blue)', bg: 'var(--accent-blue-dim)', icon: '!' },
+  LEVEL_LATER: { label: 'Save for Leveling', color: 'var(--accent-orange)', bg: 'var(--accent-orange-dim)', icon: '↑' },
+  EVALUATE: { label: 'Evaluate', color: 'var(--text-dim)', bg: 'rgba(107,114,128,0.15)', icon: '?' },
+  INGREDIENT: { label: 'Crafting Ingredient', color: 'var(--accent-green)', bg: 'var(--accent-green-dim)', icon: '⚒' },
+  DEPLOY: { label: 'Deploy/Use', color: 'var(--accent-cyan)', bg: 'rgba(34,211,238,0.12)', icon: '▶' },
+};
+
+// Known item patterns for classification
+const ITEM_PATTERNS = {
+  gems: ['Quartz','Diamond','Amethyst','Lapis Lazuli','Obsidian','Azurite','Moss Agate','Blue Spinel','Fluorite','Ruby','Emerald','Sapphire','Topaz','Citrine','Garnet','Turquoise','Onyx','Opal','Jasper','Moonstone','Sunstone','Jet','Peridot','Carnelian','Alexandrite','Aquamarine','Zircon','Malachite','Agate','Amber'],
+  phlogiston: ['Crude Phlogiston','Rough Phlogiston','Shoddy Phlogiston','Decent Phlogiston','Nice Phlogiston','Quality Phlogiston','Great Phlogiston','Amazing Phlogiston'],
+  tools: ['Butcher Knife','Skinning Knife','Simple Skinning Knife','Autopsy Kit','Handsaw','Shovel','Magnifying Glass'],
+  fun: ['Small Firework','Small Confetti Bomb','Keg of Love','Valentine\'s Banner','Pig Juice','Spider Juice'],
+  junk_patterns: ['Grass','Matted Hair','Red Game Chip','Basic Spore Bomb','Horse Apple','Piece of Green Glass','Perfectly Round Pebble','Broken Necklace'],
+  keys: ['Gulagra\'s Sigil Key','Steven Muradrake\'s Lab Key','Sarina\'s Backpack'],
+  necro_ingredients: ['Femur','Rib Bone','Bone Meal','Nightmare Flesh','Necromancy Dust','Zombified Hand','Skull'],
+  food_raw: ['Pork Shoulder','Raw Chicken','Venison','Mutton','Egg','Flour','Salt','Sugar','Peppercorns','Oregano','Broccoli','Onion','Beet','Orange','Grapes','Red Apple','Large Strawberry','Crab Meat','Clownfish','Sinewy Dog Meat','Sinewy Cat Meat','Sinewy Beast Meat','Sinewy Insect Meat','Sinewy Dinosaur Meat','Seaweed','Perch','Grapefish','Hops','Watercress','Sugarcane','Pixie Sugar'],
+  gardening: ['Bottle of Fertilizer','Bottle of Water','Strange Dirt','Bluebell Seeds','Red Aster Seeds','Violet Seeds','Dahlia Seeds','Daisy Seeds','Pansy Seeds','Red Aster','Bluebell','Eternal Greens','Evil Grass','Cotton','Mandrake Root'],
+  skins: ['Shoddy Animal Skin','Rough Animal Skin','Crude Animal Skin','Shoddy Leather Roll'],
+  coins: ['Ancient Silver Coin','Ancient Bronze Coin','Council Certificate','Big Coin Sack'],
+  potions_basic: ['Healing Potion','Armor Potion','Power Potion','Poison Resistance Potion'],
+  potions_good: ['Healing Potion Extreme','Healing Potion Omega','Power Potion Extreme','Regeneration Potion','Armor Potion Extreme','Fire Shield Potion','Strong Psychic Resistance Potion','Cold Resistance Potion','Steroid Drink','Hulking Gel','Enhanced Pineal Juice','Pineal Juice'],
+  paintings: ['Unidentified Painting','Portrait'],
+  storage_crates: ['Shoddy Storage Crate','Crude Storage Crate','Decent Storage Crate','Nice Storage Crate'],
+};
+
+// Default keep quantities for common stackable items
+const DEFAULT_KEEP_QUANTITIES = {
+  'Strange Dirt': 25,
+  'Femur': 20,
+  'Rib Bone': 10,
+  'Bone Meal': 20,
+  'Salt': 30,
+  'Grass': 0,
+  'Matted Hair': 0,
+  'Spider Leg': 20,
+  'Giant Spider Leg': 20,
+  'Shoddy Animal Skin': 15,
+  'Rough Animal Skin': 15,
+  'Crude Animal Skin': 10,
+  'Spiderweb': 30,
+  'Spider Egg': 5,
+  'Feathers': 5,
+  'Small Dinosaur Scale': 0,
+  'Parasol Mushroom': 10,
+  'Basic Spore Bomb': 0,
+  'Red Game Chip': 0,
+  'Horse Apple': 0,
+  'Golem Clay': 5,
+  'Rubywall Crystal': 30,
+  'Oak Wood': 20,
+  'Fire Dust': 15,
+  'Shock Dust': 10,
+  'Necromancy Dust': 60,
+  'Nightmare Flesh': 5,
+  'Pork Shoulder': 30,
+  'Red Apple': 20,
+  'Large Strawberry': 15,
+  'Crab Meat': 15,
+  'Clownfish': 10,
+  'Antler': 5,
+  'Rubbery Tongue': 5,
+  'Giant Mantis Claw': 0,
+  'Cat Eyeball': 3,
+  'Brain Bug Lobe': 3,
+  'Healing Potion': 0,
+  'Armor Potion': 0,
+  'Small Firework': 86,
+  'Small Confetti Bomb': 50,
+  'Goblet': 0,
+  'Plate': 0,
+  'Spoon': 0,
+  'Piece of Green Glass': 0,
+  'Broken Necklace': 0,
+  'Perfectly Round Pebble': 2,
+  'Deinonychus Claw': 5,
+  'Crossing Oil': 1,
+  'Pig Foot': 0,
+  'Boar Tusk': 0,
+  'Wolf Tail': 0,
+  'Deer Guts': 0,
+  'Rat Tail': 0,
+  'Bear Claw': 0,
+  'Bear Gallbladder': 1,
+  'Tiger Tail': 0,
+  'Snake Scales': 0,
+  'Wolf Teeth': 0,
+  'Panther Tail': 0,
+  'Toxic Sludge': 3,
+  'Ice Core': 2,
+  'Ancient Silver Coin': 4,
+  'Ancient Bronze Coin': 12,
+  'Genealogy Chart': 0,
+  'Ancient Tutorial': 0,
+  'Quarter Hoop': 0,
+  'Elven Verse': 0,
+  'Spool of Wire': 1,
+  'Floral Soap': 1,
+  'Brass Nail': 4,
+  'Fulgurite': 1,
+};
+
+// Gems default: keep 5 of each
+const DEFAULT_GEM_KEEP = 5;
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  const items = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    for (const ch of lines[i]) {
+      if (ch === '"') { inQuotes = !inQuotes; }
+      else if (ch === ',' && !inQuotes) { values.push(current.trim()); current = ''; }
+      else { current += ch; }
+    }
+    values.push(current.trim());
+    const item = {};
+    headers.forEach((h, idx) => { item[h] = values[idx] || ''; });
+    item.StackSize = parseInt(item.StackSize) || 1;
+    item.ValueEach = parseInt(item.ValueEach) || 0;
+    item.Level = item.Level ? parseInt(item.Level) : null;
+    item.Durability = item.Durability ? parseFloat(item.Durability) : null;
+    item.CraftPoints = item.CraftPoints ? parseFloat(item.CraftPoints) : null;
+    item.TotalValue = item.StackSize * item.ValueEach;
+    item._id = `${item.Storage}_${item.ItemName}_${i}`;
+    items.push(item);
+  }
+  return items;
+}
+
+function parseCharacter(json) {
+  try {
+    return typeof json === 'string' ? JSON.parse(json) : json;
+  } catch { return null; }
+}
+
+function categorizeItem(item, character) {
+  const name = item.ItemName || '';
+  const slot = item.Slot || '';
+  const typeId = parseInt(item.TypeId) || 0;
+
+  // Equipment with slots
+  if (slot && ['Head','Chest','Legs','Hands','Feet','MainHand','OffHand','Necklace','Ring','Waist','Banner'].includes(slot)) {
+    return ITEM_CATEGORIES.EQUIPMENT;
+  }
+  // Augments
+  if (name.includes('Augment')) return ITEM_CATEGORIES.AUGMENT;
+  // Paintings
+  if (name.includes('Painting') || name.includes('Portrait')) return ITEM_CATEGORIES.PAINTING;
+  // Keys
+  if (ITEM_PATTERNS.keys.some(k => name.includes(k))) return ITEM_CATEGORIES.KEY;
+  // Recipes
+  if (name.match(/^(Alchemy|Cooking|Carpentry|Tailoring|Leatherworking|Saddlery|Calligraphy|Knife|Staff|Art|Sword|Psychology|Shield):/)) return ITEM_CATEGORIES.RECIPE;
+  // Work Orders
+  if (name.includes('Work Order')) return ITEM_CATEGORIES.WORK_ORDER;
+  // Phlogiston
+  if (ITEM_PATTERNS.phlogiston.some(p => name === p)) return ITEM_CATEGORIES.PHLOGISTON;
+  // Gems
+  if (ITEM_PATTERNS.gems.some(g => name === g)) return ITEM_CATEGORIES.GEM;
+  // Tools
+  if (ITEM_PATTERNS.tools.some(t => name === t)) return ITEM_CATEGORIES.TOOL;
+  // Potions
+  if (ITEM_PATTERNS.potions_good.some(p => name === p) || ITEM_PATTERNS.potions_basic.some(p => name === p)) return ITEM_CATEGORIES.POTION;
+  if (name.includes('Potion') || name.includes('Juice') || name.includes('Drink') || name.includes('Gel')) return ITEM_CATEGORIES.POTION;
+  // Storage Crates
+  if (name.includes('Storage Crate')) return ITEM_CATEGORIES.TOOL;
+  // Fun/Event
+  if (ITEM_PATTERNS.fun.some(f => name === f)) return ITEM_CATEGORIES.FUN;
+  // Gardening
+  if (ITEM_PATTERNS.gardening.some(g => name === g) || name.includes('Seeds') || name.includes('Seedling')) return ITEM_CATEGORIES.GARDENING;
+  // Food/Cooking
+  if (ITEM_PATTERNS.food_raw.some(f => name === f)) return ITEM_CATEGORIES.FOOD_INGREDIENT;
+  // Cooked food (higher value foods, specific cooked items)
+  if (name.match(/^(Bacon|Sausage|Honey Ham|Venison|Chicken|Baked|Boiled|Fried|Candied|Jerky|Steak|Drumstick|Hash|Onion Rings|Fruit Cocktail|Hardtack|Hard Roll|BBQ|Flatbread|Bowl|Roast|Juicy|Duke)/)) return ITEM_CATEGORIES.FOOD_INGREDIENT;
+  if (name.includes('Cheese') || name === 'Cave Cheese' || name === 'Butter') return ITEM_CATEGORIES.FOOD_INGREDIENT;
+  // Necro ingredients
+  if (ITEM_PATTERNS.necro_ingredients.some(n => name === n || name.includes(n))) return ITEM_CATEGORIES.CRAFTING_MAT;
+  // Skins
+  if (ITEM_PATTERNS.skins.some(s => name === s)) return ITEM_CATEGORIES.CRAFTING_MAT;
+  // Coins/Currency
+  if (ITEM_PATTERNS.coins.some(c => name === c)) return ITEM_CATEGORIES.CURRENCY;
+  if (name.includes('Calling Card')) return ITEM_CATEGORIES.CURRENCY;
+  // Animal parts
+  if (name.match(/(Claw|Tail|Tooth|Teeth|Tongue|Lobe|Gallbladder|Guts|Tusk|Foot|Scales|Egg|Eyeball|Lung|Stinger|Flesh)/)) return ITEM_CATEGORIES.ANIMAL_PART;
+  // Junk patterns
+  if (ITEM_PATTERNS.junk_patterns.some(j => name === j)) return ITEM_CATEGORIES.JUNK;
+  // Crafting materials (catch-all for common mats)
+  if (name.match(/(Wood|Crystal|Phlogiston|Thread|Dust|Wool|Slab|Chips|Spiderweb|Ink|Parchment|Saltpeter|Sulfur|Oil)/)) return ITEM_CATEGORIES.CRAFTING_MAT;
+  // First Aid / Armor Kits
+  if (name.includes('First Aid Kit') || name.includes('Armor Patch Kit') || name.includes('Blanket')) return ITEM_CATEGORIES.CONSUMABLE;
+  // Mushrooms
+  if (name.includes('Mushroom')) return ITEM_CATEGORIES.CRAFTING_MAT;
+  // Bottles
+  if (name.includes('Bottle')) return ITEM_CATEGORIES.CRAFTING_MAT;
+
+  return ITEM_CATEGORIES.CURRENCY;
+}
+
+function getRecommendation(item, character, overrides, keepQuantities) {
+  const name = item.ItemName;
+  const category = categorizeItem(item, character);
+  const skills = character?.Skills || {};
+  const quests = character?.ActiveQuests || [];
+
+  // Check user overrides first
+  if (overrides[name]) {
+    return { action: ACTIONS[overrides[name].action] || ACTIONS.KEEP, reason: overrides[name].reason || 'User override', category };
+  }
+
+  // Quest item check — match item names against quest names loosely
+  const questKeywords = quests.join(' ').toLowerCase();
+  const nameLC = name.toLowerCase().replace(/[^a-z]/g, '');
+
+  // Specific quest-item matches
+  const questItemMap = {
+    'Sulfur': ['SulfurBath','SulfurForYetta'],
+    'Guardian Lure': ['GuardianLures'],
+    'Watercress': ['WatercressSalad'],
+    'Quartz': ['QuartzJewelry'],
+    'Perfectly Round Pebble': ['PerfectlyRoundPebbles'],
+    'Rubbery Tongue': ['TonguesOfTheRanalan'],
+    'Cotton': ['CottonForDresses','GetSomeCotton'],
+    'Mandrake Root': ['MandrakeRoot'],
+    'Sarina\'s Backpack': ['FindingYasindasDaughter'],
+    'Steven Muradrake\'s Lab Key': [],
+    'Gulagra\'s Sigil Key': [],
+    'Orange': ['CocktailsForThimblePete'],
+    'Floral Soap': ['RitasShellRequest'],
+    'Brass Nail': ['TheGolemsGear'],
+    'Pork Shoulder': ['UrBacon'],
+  };
+  if (questItemMap[name] && questItemMap[name].some(q => quests.includes(q))) {
+    return { action: ACTIONS.QUEST, reason: `Needed for quest: ${questItemMap[name].find(q => quests.includes(q))}`, category };
+  }
+  if (name.includes('Key') || name === 'Sarina\'s Backpack') {
+    return { action: ACTIONS.QUEST, reason: 'Quest/dungeon access item', category };
+  }
+
+  // Equipment logic
+  if (category === ITEM_CATEGORIES.EQUIPMENT) {
+    const skill1 = item.Skill1 || '';
+    const skill2 = item.Skill2 || '';
+    const rarity = item.Rarity || '';
+    const level = item.Level || 0;
+    const coreSkills = ['Necromancy','AnimalHandling'];
+    const supportSkills = ['FireMagic','Sword'];
+    const hasCoreSkill = coreSkills.some(s => s === skill1 || s === skill2);
+    const hasSupportSkill = supportSkills.some(s => s === skill1 || s === skill2);
+    const necroLevel = skills.Necromancy?.Level || 0;
+    const ahLevel = skills.AnimalHandling?.Level || 0;
+    const maxCombat = Math.max(necroLevel, ahLevel);
+
+    if (hasCoreSkill) {
+      if (level >= 80) return { action: ACTIONS.KEEP, reason: `Endgame ${skill1}/${skill2} gear — save for later`, category };
+      if (level >= maxCombat - 5 && ['Epic','Legendary','Exceptional'].includes(rarity)) {
+        return { action: ACTIONS.KEEP, reason: `Current-tier ${rarity} gear for your build`, category };
+      }
+      if (level < maxCombat - 15 && !['Epic','Legendary'].includes(rarity)) {
+        return { action: ACTIONS.DISENCHANT, reason: `Outleveled ${rarity} L${level} — distill for phlogiston`, category };
+      }
+      return { action: ACTIONS.EVALUATE, reason: `${rarity} L${level} ${skill1}/${skill2} — compare to current gear`, category };
+    }
+    if (hasSupportSkill && level <= 25) {
+      return { action: ACTIONS.DISENCHANT, reason: `Off-build ${skill1}/${skill2} gear — distill`, category };
+    }
+    if (!hasCoreSkill && !hasSupportSkill) {
+      if (['Legendary','Epic'].includes(rarity)) {
+        return { action: ACTIONS.DISENCHANT, reason: `Off-build ${rarity} — good phlogiston from distilling`, category };
+      }
+      return { action: ACTIONS.SELL_ALL, reason: `Off-build gear, no relevant skills`, category };
+    }
+    return { action: ACTIONS.EVALUATE, reason: `${rarity} L${level} — review mods`, category };
+  }
+
+  // Augments
+  if (category === ITEM_CATEGORIES.AUGMENT) {
+    const skill1 = item.Skill1 || '';
+    const coreSkills = ['Necromancy','AnimalHandling','AnySkill'];
+    if (coreSkills.includes(skill1)) return { action: ACTIONS.KEEP, reason: `Augment for ${skill1} — save for gear`, category };
+    return { action: ACTIONS.SELL_ALL, reason: `Off-build augment (${skill1})`, category };
+  }
+
+  // Paintings
+  if (category === ITEM_CATEGORIES.PAINTING) {
+    if (name === 'Unidentified Painting') {
+      const artLevel = skills.ArtHistory?.Level || 0;
+      return { action: ACTIONS.KEEP, reason: `Identify for Art History XP (currently level ${artLevel}), then sell`, category };
+    }
+    return { action: ACTIONS.SELL_ALL, reason: 'Identified painting — sell for gold', category };
+  }
+
+  // Phlogiston — always keep
+  if (category === ITEM_CATEGORIES.PHLOGISTON) {
+    return { action: ACTIONS.KEEP, reason: 'Critical for Transmutation — never sell', category };
+  }
+
+  // Gems
+  if (category === ITEM_CATEGORIES.GEM) {
+    const keepQty = keepQuantities[name] ?? DEFAULT_GEM_KEEP;
+    if (item.StackSize <= keepQty) return { action: ACTIONS.KEEP, reason: `Keep ${keepQty} for Transmutation/crafting`, category };
+    return { action: ACTIONS.SELL_SOME, reason: `Keep ${keepQty}, sell ${item.StackSize - keepQty} (${(item.StackSize - keepQty) * item.ValueEach}g)`, category };
+  }
+
+  // Tools
+  if (category === ITEM_CATEGORIES.TOOL) {
+    if (name.includes('Storage Crate')) {
+      return { action: ACTIONS.KEEP, reason: 'Portable temp storage (5 min) — keep one on you for field use', category };
+    }
+    return { action: ACTIONS.KEEP, reason: 'Essential tool — always carry', category };
+  }
+
+  // Recipes
+  if (category === ITEM_CATEGORIES.RECIPE) {
+    const skillMatch = name.match(/^([^:]+):/);
+    if (skillMatch) {
+      const recipeSkill = skillMatch[1].trim();
+      const skillMap = { 'Alchemy': 'Alchemy', 'Cooking': 'Cooking', 'Carpentry': 'Carpentry', 'Tailoring': 'Tailoring', 'Leatherworking': 'Leatherworking', 'Saddlery': 'AnimalHandling', 'Calligraphy': 'Sword', 'Knife': 'Unknown', 'Staff': 'Staff', 'Art': 'Artistry', 'Psychology': 'Psychology', 'Shield': 'Shield', 'Sword': 'Sword' };
+      const mappedSkill = skillMap[recipeSkill] || recipeSkill;
+      const skillLevel = skills[mappedSkill]?.Level || 0;
+
+      if (recipeSkill === 'Saddlery') return { action: ACTIONS.KEEP, reason: 'Saddlery recipe — valuable for AH pet build', category };
+      if (recipeSkill === 'Knife' && name.includes('Poison')) return { action: ACTIONS.SELL_ALL, reason: `Knife skill not leveled — sell for ${item.ValueEach}g`, category };
+      if (recipeSkill === 'Knife') return { action: ACTIONS.SELL_ALL, reason: `Knife combat not used — sell for ${item.ValueEach}g`, category };
+      if (skillLevel >= 15 || ['Necromancy','AnimalHandling','Cooking','Alchemy'].includes(mappedSkill)) {
+        return { action: ACTIONS.LEVEL_LATER, reason: `${recipeSkill} recipe — ${mappedSkill} is level ${skillLevel}`, category };
+      }
+      if (skillLevel <= 3 && item.ValueEach >= 200) {
+        return { action: ACTIONS.SELL_ALL, reason: `${recipeSkill} skill only level ${skillLevel} — sell for ${item.ValueEach}g`, category };
+      }
+    }
+    return { action: ACTIONS.EVALUATE, reason: 'Recipe — check if skill is worth leveling', category };
+  }
+
+  // Potions
+  if (category === ITEM_CATEGORIES.POTION) {
+    if (ITEM_PATTERNS.potions_good.some(p => name === p)) {
+      return { action: ACTIONS.KEEP, reason: 'High-tier consumable — use in combat', category };
+    }
+    if (ITEM_PATTERNS.potions_basic.some(p => name === p)) {
+      if (name === 'Healing Potion' || name === 'Armor Potion') {
+        return { action: ACTIONS.SELL_ALL, reason: `Basic potion, outleveled — sell all (${item.TotalValue}g)`, category };
+      }
+    }
+    return { action: ACTIONS.EVALUATE, reason: 'Potion — check if you have better versions', category };
+  }
+
+  // Food
+  if (category === ITEM_CATEGORIES.FOOD_INGREDIENT) {
+    const gourmandLevel = skills.Gourmand?.Level || 0;
+    const cookingLevel = skills.Cooking?.Level || 0;
+    const keepQty = keepQuantities[name] ?? null;
+
+    // Cooked food with high value
+    if (item.ValueEach >= 50 && !ITEM_PATTERNS.food_raw.some(f => name === f)) {
+      return { action: ACTIONS.USE, reason: `Eat if new for Gourmand XP (Gourmand ${gourmandLevel}), use in combat`, category };
+    }
+    // Raw with keep quantity
+    if (keepQty !== null && item.StackSize > keepQty) {
+      return { action: ACTIONS.SELL_SOME, reason: `Keep ${keepQty}, cook/sell rest`, category };
+    }
+    return { action: ACTIONS.KEEP, reason: `Cooking ingredient (Cooking ${cookingLevel})`, category };
+  }
+
+  // Gardening
+  if (category === ITEM_CATEGORIES.GARDENING) {
+    if (name === 'Strange Dirt') {
+      const keepQty = keepQuantities[name] ?? 25;
+      if (item.StackSize > keepQty) {
+        return { action: ACTIONS.SELL_SOME, reason: `Keep ${keepQty} for fertilizer, sell rest`, category };
+      }
+      return { action: ACTIONS.INGREDIENT, reason: 'Fertilizer ingredient — keep for Gardening', category };
+    }
+    if (name === 'Eternal Greens') return { action: ACTIONS.KEEP, reason: 'Rare gardening item — high value', category };
+    return { action: ACTIONS.KEEP, reason: 'Gardening supply', category };
+  }
+
+  // Crafting Materials
+  if (category === ITEM_CATEGORIES.CRAFTING_MAT) {
+    const keepQty = keepQuantities[name] ?? null;
+    // Necro-specific materials
+    if (ITEM_PATTERNS.necro_ingredients.some(n => name === n)) {
+      return { action: ACTIONS.INGREDIENT, reason: 'Necromancy crafting material — keep for build', category };
+    }
+    // Skins
+    if (ITEM_PATTERNS.skins.some(s => name === s)) {
+      const tanningLevel = skills.Tanning?.Level || 0;
+      const kq = keepQty ?? 15;
+      if (item.StackSize > kq) {
+        return { action: ACTIONS.SELL_SOME, reason: `Keep ${kq} for Tanning (level ${tanningLevel}), sell rest`, category };
+      }
+      return { action: ACTIONS.KEEP, reason: `Tanning material (level ${tanningLevel})`, category };
+    }
+    if (keepQty !== null && keepQty === 0) {
+      return { action: ACTIONS.SELL_ALL, reason: `Low value, not actively used`, category };
+    }
+    if (keepQty !== null && item.StackSize > keepQty) {
+      return { action: ACTIONS.SELL_SOME, reason: `Keep ${keepQty}, sell ${item.StackSize - keepQty}`, category };
+    }
+    return { action: ACTIONS.KEEP, reason: 'Crafting material', category };
+  }
+
+  // Animal Parts
+  if (category === ITEM_CATEGORIES.ANIMAL_PART) {
+    const keepQty = keepQuantities[name] ?? 3;
+    if (keepQty === 0) return { action: ACTIONS.SELL_ALL, reason: 'Low-use animal part', category };
+    if (item.StackSize > keepQty) {
+      return { action: ACTIONS.SELL_SOME, reason: `Keep ${keepQty} for quests/recipes, sell rest`, category };
+    }
+    return { action: ACTIONS.KEEP, reason: 'Possible quest/recipe use — check before selling', category };
+  }
+
+  // Currency
+  if (category === ITEM_CATEGORIES.CURRENCY) {
+    if (name === 'Council Certificate') return { action: ACTIONS.KEEP, reason: 'High-value currency (1000g each) — save for NPC purchases', category };
+    if (name.includes('Coin') || name === 'Big Coin Sack') return { action: ACTIONS.SELL_ALL, reason: `Currency item — sell for ${item.TotalValue}g`, category };
+    if (name.includes('Calling Card')) return { action: ACTIONS.KEEP, reason: 'Goblin calling card — may have quest/favor use', category };
+    return { action: ACTIONS.EVALUATE, reason: 'Misc item — check use', category };
+  }
+
+  // Consumables
+  if (category === ITEM_CATEGORIES.CONSUMABLE) {
+    if (name.includes('Simple First Aid') && item.StackSize > 0) {
+      return { action: ACTIONS.SELL_ALL, reason: 'Outleveled — you have better kits', category };
+    }
+    if (name.includes('First Aid Kit') || name.includes('Armor Patch Kit')) {
+      return { action: ACTIONS.KEEP, reason: 'Combat supply — keep stocked', category };
+    }
+    return { action: ACTIONS.KEEP, reason: 'Consumable', category };
+  }
+
+  // Fun
+  if (category === ITEM_CATEGORIES.FUN) {
+    return { action: ACTIONS.KEEP, reason: 'Fun/event item — keep if you enjoy it', category };
+  }
+
+  // Work Orders
+  if (category === ITEM_CATEGORIES.WORK_ORDER) {
+    return { action: ACTIONS.KEEP, reason: 'Active work order — complete for rewards', category };
+  }
+
+  // Junk
+  if (category === ITEM_CATEGORIES.JUNK) {
+    return { action: ACTIONS.SELL_ALL, reason: `Vendor trash — ${item.TotalValue}g`, category };
+  }
+
+  return { action: ACTIONS.EVALUATE, reason: 'Uncategorized — review manually', category };
+}
+
+// ============================================================
+// COMPONENTS
+// ============================================================
+
+function App() {
+  const [itemsData, setItemsData] = useState(null);
+  const [characterData, setCharacterData] = useState(null);
+  const [overrides, setOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gorgon_overrides') || '{}'); } catch { return {}; }
+  });
+  const [keepQuantities, setKeepQuantities] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gorgon_keep_quantities') || '{}');
+      return { ...DEFAULT_KEEP_QUANTITIES, ...saved };
+    } catch { return { ...DEFAULT_KEEP_QUANTITIES }; }
+  });
+  const [filter, setFilter] = useState({ storage: 'all', action: 'all', category: 'all', search: '' });
+  const [sortBy, setSortBy] = useState('action');
+  const [editingItem, setEditingItem] = useState(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [importTimestamp, setImportTimestamp] = useState(null);
+
+  useEffect(() => {
+    try { localStorage.setItem('gorgon_overrides', JSON.stringify(overrides)); } catch {}
+  }, [overrides]);
+  useEffect(() => {
+    const custom = {};
+    Object.entries(keepQuantities).forEach(([k, v]) => {
+      if (DEFAULT_KEEP_QUANTITIES[k] !== v) custom[k] = v;
+    });
+    try { localStorage.setItem('gorgon_keep_quantities', JSON.stringify(custom)); } catch {}
+  }, [keepQuantities]);
+
+  const handleFileDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer?.files || e.target?.files;
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target.result;
+        if (file.name.endsWith('.csv') || file.name.endsWith('.tsv')) {
+          setItemsData(parseCSV(text));
+          const match = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+          setImportTimestamp(match ? match[1] : new Date().toISOString().slice(0, 10));
+        } else if (file.name.endsWith('.json')) {
+          setCharacterData(parseCharacter(text));
+        }
+      };
+      reader.readAsText(file);
+    });
+  }, []);
+
+  const analyzed = useMemo(() => {
+    if (!itemsData) return [];
+    return itemsData.map(item => {
+      const rec = getRecommendation(item, characterData, overrides, keepQuantities);
+      return { ...item, ...rec };
+    });
+  }, [itemsData, characterData, overrides, keepQuantities]);
+
+  const storageLocations = useMemo(() => {
+    if (!analyzed.length) return [];
+    return [...new Set(analyzed.map(i => i.Storage))].sort();
+  }, [analyzed]);
+
+  const categories = useMemo(() => {
+    if (!analyzed.length) return [];
+    return [...new Set(analyzed.map(i => i.category))].sort();
+  }, [analyzed]);
+
+  const filtered = useMemo(() => {
+    let items = analyzed;
+    if (filter.storage !== 'all') items = items.filter(i => i.Storage === filter.storage);
+    if (filter.action !== 'all') items = items.filter(i => i.action.label === filter.action);
+    if (filter.category !== 'all') items = items.filter(i => i.category === filter.category);
+    if (filter.search) {
+      const s = filter.search.toLowerCase();
+      items = items.filter(i => i.ItemName.toLowerCase().includes(s));
+    }
+    // Sort
+    if (sortBy === 'action') {
+      const order = ['Sell All','Sell Some','Distill','Use/Eat','Evaluate','Save for Leveling','Crafting Ingredient','Deploy/Use','Quest Item','Keep'];
+      items = [...items].sort((a, b) => order.indexOf(a.action.label) - order.indexOf(b.action.label));
+    } else if (sortBy === 'value') {
+      items = [...items].sort((a, b) => b.TotalValue - a.TotalValue);
+    } else if (sortBy === 'name') {
+      items = [...items].sort((a, b) => a.ItemName.localeCompare(b.ItemName));
+    } else if (sortBy === 'storage') {
+      items = [...items].sort((a, b) => a.Storage.localeCompare(b.Storage));
+    }
+    return items;
+  }, [analyzed, filter, sortBy]);
+
+  const stats = useMemo(() => {
+    const sellGold = analyzed.filter(i => ['Sell All','Sell Some'].includes(i.action.label))
+      .reduce((sum, i) => {
+        if (i.action.label === 'Sell All') return sum + i.TotalValue;
+        const kq = keepQuantities[i.ItemName] ?? DEFAULT_GEM_KEEP;
+        const sellQty = Math.max(0, i.StackSize - kq);
+        return sum + (sellQty * i.ValueEach);
+      }, 0);
+    const actionCounts = {};
+    analyzed.forEach(i => { actionCounts[i.action.label] = (actionCounts[i.action.label] || 0) + 1; });
+    return { sellGold, actionCounts, totalItems: analyzed.length, totalSlots: analyzed.length };
+  }, [analyzed, keepQuantities]);
+
+  if (!itemsData) {
+    return React.createElement(DropZone, { onFileDrop: handleFileDrop, characterLoaded: !!characterData });
+  }
+
+  return React.createElement('div', { style: { maxWidth: 1400, margin: '0 auto', padding: '20px 24px' } },
+    React.createElement(Header, { stats, characterData, importTimestamp, onReset: () => { setItemsData(null); setCharacterData(null); } }),
+    React.createElement(Toolbar, { filter, setFilter, sortBy, setSortBy, storageLocations, categories, showConfig, setShowConfig, onFileDrop: handleFileDrop }),
+    showConfig && React.createElement(ConfigPanel, { keepQuantities, setKeepQuantities, overrides, setOverrides }),
+    React.createElement(ItemList, { items: filtered, overrides, setOverrides, keepQuantities, setKeepQuantities, editingItem, setEditingItem, characterData })
+  );
+}
+
+function DropZone({ onFileDrop, characterLoaded }) {
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef();
+
+  return React.createElement('div', {
+    style: {
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', padding: 40,
+    }
+  },
+    React.createElement('div', {
+      onDragOver: (e) => { e.preventDefault(); setDragOver(true); },
+      onDragLeave: () => setDragOver(false),
+      onDrop: (e) => { setDragOver(false); onFileDrop(e); },
+      onClick: () => fileRef.current?.click(),
+      style: {
+        border: `2px dashed ${dragOver ? 'var(--accent-green)' : 'var(--border-light)'}`,
+        borderRadius: 16, padding: '80px 60px', textAlign: 'center', cursor: 'pointer',
+        background: dragOver ? 'rgba(52,211,153,0.04)' : 'var(--bg-panel)',
+        transition: 'all 0.2s', maxWidth: 600, width: '100%',
+      }
+    },
+      React.createElement('div', { style: { fontSize: 48, marginBottom: 16, opacity: 0.6 } }, '⚔'),
+      React.createElement('h1', { style: { fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-bright)', marginBottom: 8, letterSpacing: 1 } }, 'Gorgon Inventory Advisor'),
+      React.createElement('p', { style: { color: 'var(--text-dim)', fontSize: 16, marginBottom: 24, lineHeight: 1.6 } },
+        'Drop your Project Gorgon export files here'),
+      React.createElement('div', { style: { display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' } },
+        React.createElement('div', { style: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: 'var(--text)' } },
+          '📄 Items CSV ', React.createElement('span', { style: { color: 'var(--text-dim)' } }, '(required)')),
+        React.createElement('div', { style: { background: characterLoaded ? 'var(--accent-green-dim)' : 'var(--bg-card)', border: `1px solid ${characterLoaded ? 'var(--accent-green)' : 'var(--border)'}`, borderRadius: 8, padding: '10px 16px', fontSize: 13, color: characterLoaded ? 'var(--accent-green)' : 'var(--text)' } },
+          characterLoaded ? '✓ Character JSON loaded' : '📄 Character JSON (optional)')
+      ),
+      React.createElement('input', { ref: fileRef, type: 'file', multiple: true, accept: '.csv,.json,.tsv', onChange: onFileDrop, style: { display: 'none' } })
+    ),
+    React.createElement('p', { style: { color: 'var(--text-dim)', fontSize: 12, marginTop: 16, maxWidth: 500, textAlign: 'center', lineHeight: 1.5 } },
+      'Export from Project Gorgon using the Gorgon Lore Exporter addon. Character JSON enables skill-aware recommendations and quest detection.')
+  );
+}
+
+function Header({ stats, characterData, importTimestamp, onReset }) {
+  const charName = characterData?.Character || 'Unknown';
+  const gold = characterData?.Currencies?.GOLD || '?';
+
+  return React.createElement('div', { style: { marginBottom: 24 } },
+    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 } },
+      React.createElement('div', null,
+        React.createElement('h1', { style: { fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--text-bright)', letterSpacing: 1, marginBottom: 4 } },
+          `${charName}'s Inventory Advisor`),
+        React.createElement('p', { style: { color: 'var(--text-dim)', fontSize: 13 } },
+          `${stats.totalItems} items analyzed · ${gold.toLocaleString?.() || gold}g on hand · Imported ${importTimestamp || 'today'}`)
+      ),
+      React.createElement('button', { onClick: onReset, style: { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-dim)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 } }, '↻ Load New Files')
+    ),
+    React.createElement('div', { style: { display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' } },
+      Object.entries(stats.actionCounts).sort((a,b) => b[1] - a[1]).map(([label, count]) => {
+        const act = Object.values(ACTIONS).find(a => a.label === label);
+        return React.createElement('div', { key: label, style: { background: act?.bg || 'var(--bg-card)', border: `1px solid ${act?.color || 'var(--border)'}30`, borderRadius: 8, padding: '6px 12px', fontSize: 13, color: act?.color || 'var(--text)' } },
+          `${act?.icon || ''} ${label}: ${count}`);
+      }),
+      React.createElement('div', { style: { background: 'var(--accent-yellow-dim)', border: '1px solid var(--accent-yellow)30', borderRadius: 8, padding: '6px 12px', fontSize: 13, color: 'var(--accent-yellow)', fontWeight: 600 } },
+        `💰 ~${stats.sellGold.toLocaleString()}g recoverable`)
+    )
+  );
+}
+
+function Toolbar({ filter, setFilter, sortBy, setSortBy, storageLocations, categories, showConfig, setShowConfig, onFileDrop }) {
+  const fileRef = useRef();
+  const selectStyle = {
+    background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)',
+    padding: '7px 10px', borderRadius: 6, fontSize: 13, outline: 'none', minWidth: 140,
+  };
+  const inputStyle = { ...selectStyle, minWidth: 180 };
+
+  return React.createElement('div', { style: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' } },
+    React.createElement('input', { type: 'text', placeholder: '🔍 Search items...', value: filter.search, onChange: e => setFilter(f => ({ ...f, search: e.target.value })), style: inputStyle }),
+    React.createElement('select', { value: filter.storage, onChange: e => setFilter(f => ({ ...f, storage: e.target.value })), style: selectStyle },
+      React.createElement('option', { value: 'all' }, 'All Locations'),
+      storageLocations.map(s => React.createElement('option', { key: s, value: s }, s))
+    ),
+    React.createElement('select', { value: filter.action, onChange: e => setFilter(f => ({ ...f, action: e.target.value })), style: selectStyle },
+      React.createElement('option', { value: 'all' }, 'All Actions'),
+      Object.values(ACTIONS).map(a => React.createElement('option', { key: a.label, value: a.label }, `${a.icon} ${a.label}`))
+    ),
+    React.createElement('select', { value: filter.category, onChange: e => setFilter(f => ({ ...f, category: e.target.value })), style: selectStyle },
+      React.createElement('option', { value: 'all' }, 'All Categories'),
+      categories.map(c => React.createElement('option', { key: c, value: c }, c))
+    ),
+    React.createElement('select', { value: sortBy, onChange: e => setSortBy(e.target.value), style: { ...selectStyle, minWidth: 120 } },
+      React.createElement('option', { value: 'action' }, 'Sort: Action'),
+      React.createElement('option', { value: 'value' }, 'Sort: Value'),
+      React.createElement('option', { value: 'name' }, 'Sort: Name'),
+      React.createElement('option', { value: 'storage' }, 'Sort: Location')
+    ),
+    React.createElement('div', { style: { flex: 1 } }),
+    React.createElement('button', { onClick: () => setShowConfig(s => !s), style: { background: showConfig ? 'var(--accent-blue-dim)' : 'var(--bg-card)', border: `1px solid ${showConfig ? 'var(--accent-blue)' : 'var(--border)'}`, color: showConfig ? 'var(--accent-blue)' : 'var(--text-dim)', padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13 } },
+      '⚙ Rules'),
+    React.createElement('button', { onClick: () => fileRef.current?.click(), style: { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-dim)', padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13 } }, '+ Add File'),
+    React.createElement('input', { ref: fileRef, type: 'file', multiple: true, accept: '.csv,.json', onChange: onFileDrop, style: { display: 'none' } })
+  );
+}
+
+function ConfigPanel({ keepQuantities, setKeepQuantities, overrides, setOverrides }) {
+  const [editKey, setEditKey] = useState('');
+  const [editVal, setEditVal] = useState('');
+
+  const entries = Object.entries(keepQuantities).sort((a, b) => a[0].localeCompare(b[0]));
+
+  return React.createElement('div', { style: { background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 16 } },
+    React.createElement('h3', { style: { fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-bright)', marginBottom: 12 } }, 'Keep Quantity Rules'),
+    React.createElement('p', { style: { color: 'var(--text-dim)', fontSize: 13, marginBottom: 16 } }, 'Set how many of each stackable item to keep. Items above this count will be flagged "Sell Some".'),
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 6 } },
+      entries.map(([name, qty]) =>
+        React.createElement('div', { key: name, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 4, background: 'var(--bg-card)' } },
+          React.createElement('span', { style: { flex: 1, fontSize: 13, color: 'var(--text)' } }, name),
+          React.createElement('input', {
+            type: 'number', min: 0, value: qty,
+            onChange: e => setKeepQuantities(q => ({ ...q, [name]: parseInt(e.target.value) || 0 })),
+            style: { width: 56, background: 'var(--bg-dark)', border: '1px solid var(--border)', color: 'var(--text-bright)', padding: '3px 6px', borderRadius: 4, fontSize: 13, textAlign: 'center' }
+          })
+        )
+      )
+    ),
+    Object.keys(overrides).length > 0 && React.createElement('div', { style: { marginTop: 20 } },
+      React.createElement('h3', { style: { fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-bright)', marginBottom: 8 } }, 'Item Overrides'),
+      Object.entries(overrides).map(([name, ov]) =>
+        React.createElement('div', { key: name, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', marginBottom: 4, borderRadius: 4, background: 'var(--bg-card)' } },
+          React.createElement('span', { style: { flex: 1, fontSize: 13 } }, `${name}: ${ov.action}`),
+          React.createElement('span', { style: { fontSize: 12, color: 'var(--text-dim)' } }, ov.reason),
+          React.createElement('button', { onClick: () => setOverrides(o => { const n = { ...o }; delete n[name]; return n; }), style: { background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: 14 } }, '✕')
+        )
+      )
+    )
+  );
+}
+
+function ItemList({ items, overrides, setOverrides, keepQuantities, setKeepQuantities, editingItem, setEditingItem }) {
+  if (!items.length) {
+    return React.createElement('div', { style: { textAlign: 'center', padding: 60, color: 'var(--text-dim)' } },
+      React.createElement('p', { style: { fontSize: 16 } }, 'No items match your filters'));
+  }
+
+  return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '42px 1fr 140px 100px 80px 80px 140px 42px', gap: 8, padding: '8px 12px', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--bg-dark)', zIndex: 10 } },
+      React.createElement('span', null, ''),
+      React.createElement('span', null, 'Item'),
+      React.createElement('span', null, 'Location'),
+      React.createElement('span', null, 'Category'),
+      React.createElement('span', { style: { textAlign: 'right' } }, 'Qty'),
+      React.createElement('span', { style: { textAlign: 'right' } }, 'Value'),
+      React.createElement('span', null, 'Reason'),
+      React.createElement('span', null, '')
+    ),
+    items.map((item, idx) =>
+      React.createElement(ItemRow, { key: item._id, item, overrides, setOverrides, keepQuantities, setKeepQuantities, isEditing: editingItem === item._id, setEditingItem })
+    )
+  );
+}
+
+const RARITY_COLORS = { Common: 'var(--rarity-common)', Uncommon: 'var(--rarity-uncommon)', Rare: 'var(--rarity-rare)', Exceptional: 'var(--rarity-exceptional)', Epic: 'var(--rarity-epic)', Legendary: 'var(--rarity-legendary)' };
+
+function ItemRow({ item, overrides, setOverrides, keepQuantities, setKeepQuantities, isEditing, setEditingItem }) {
+  const [showOverride, setShowOverride] = useState(false);
+  const act = item.action;
+  const hasOverride = !!overrides[item.ItemName];
+  const rarityColor = RARITY_COLORS[item.Rarity] || 'var(--text)';
+
+  return React.createElement('div', null,
+    React.createElement('div', {
+      style: {
+        display: 'grid', gridTemplateColumns: '42px 1fr 140px 100px 80px 80px 140px 42px',
+        gap: 8, padding: '8px 12px', fontSize: 14, alignItems: 'center',
+        background: hasOverride ? 'rgba(96,165,250,0.04)' : 'transparent',
+        borderLeft: `3px solid ${act.color}`,
+        borderBottom: '1px solid var(--border)',
+        transition: 'background 0.15s',
+      },
+      onMouseEnter: e => e.currentTarget.style.background = 'var(--bg-hover)',
+      onMouseLeave: e => e.currentTarget.style.background = hasOverride ? 'rgba(96,165,250,0.04)' : 'transparent',
+    },
+      // Action badge
+      React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 6, background: act.bg, color: act.color, fontSize: 14, fontWeight: 700, flexShrink: 0 } }, act.icon),
+      // Item name + skills
+      React.createElement('div', { style: { minWidth: 0 } },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          item.Rarity && React.createElement('span', { style: { color: rarityColor, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' } }, `[${item.Rarity}]`),
+          React.createElement('span', { style: { color: 'var(--text-bright)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.ItemName),
+          item.Level && React.createElement('span', { style: { color: 'var(--text-dim)', fontSize: 12 } }, `L${item.Level}`)
+        ),
+        (item.Skill1 || item.Skill2) && React.createElement('div', { style: { fontSize: 11, color: 'var(--text-dim)', marginTop: 1 } },
+          [item.Skill1, item.Skill2].filter(s => s && s !== 'Unknown').join(' / ')
+        )
+      ),
+      // Location
+      React.createElement('span', { style: { fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.Storage),
+      // Category
+      React.createElement('span', { style: { fontSize: 11, color: 'var(--text-dim)' } }, item.category),
+      // Quantity
+      React.createElement('span', { style: { textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text)' } }, item.StackSize > 1 ? `×${item.StackSize}` : ''),
+      // Value
+      React.createElement('span', { style: { textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 13, color: item.TotalValue >= 100 ? 'var(--accent-yellow)' : 'var(--text-dim)' } }, item.TotalValue > 0 ? `${item.TotalValue.toLocaleString()}g` : ''),
+      // Reason
+      React.createElement('span', { style: { fontSize: 11, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.reason),
+      // Edit button
+      React.createElement('button', {
+        onClick: () => setShowOverride(s => !s),
+        style: { background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16, padding: 4 },
+        title: 'Override recommendation'
+      }, '✎')
+    ),
+    showOverride && React.createElement(OverridePanel, {
+      item, overrides, setOverrides, keepQuantities, setKeepQuantities,
+      onClose: () => setShowOverride(false)
+    })
+  );
+}
+
+function OverridePanel({ item, overrides, setOverrides, keepQuantities, setKeepQuantities, onClose }) {
+  const [action, setAction] = useState(overrides[item.ItemName]?.action || '');
+  const [reason, setReason] = useState(overrides[item.ItemName]?.reason || '');
+  const [keepQty, setKeepQty] = useState(keepQuantities[item.ItemName] ?? '');
+
+  const save = () => {
+    if (action) {
+      setOverrides(o => ({ ...o, [item.ItemName]: { action, reason: reason || `Manual: ${action}` } }));
+    }
+    if (keepQty !== '' && !isNaN(keepQty)) {
+      setKeepQuantities(q => ({ ...q, [item.ItemName]: parseInt(keepQty) }));
+    }
+    onClose();
+  };
+
+  const clear = () => {
+    setOverrides(o => { const n = { ...o }; delete n[item.ItemName]; return n; });
+    onClose();
+  };
+
+  const btnStyle = (isActive) => ({
+    padding: '5px 10px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 12,
+    fontWeight: isActive ? 600 : 400,
+    background: isActive ? 'var(--accent-blue-dim)' : 'var(--bg-dark)',
+    color: isActive ? 'var(--accent-blue)' : 'var(--text-dim)',
+  });
+
+  return React.createElement('div', { style: { background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 0, padding: '12px 16px', borderLeft: '3px solid var(--accent-blue)' } },
+    React.createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' } },
+      React.createElement('span', { style: { fontSize: 13, color: 'var(--text-bright)', fontWeight: 600, marginRight: 8 } }, `Override: ${item.ItemName}`),
+      Object.entries(ACTIONS).map(([key, act]) =>
+        React.createElement('button', { key, onClick: () => setAction(key), style: btnStyle(action === key) }, `${act.icon} ${act.label}`)
+      )
+    ),
+    React.createElement('div', { style: { display: 'flex', gap: 10, alignItems: 'center' } },
+      React.createElement('input', { type: 'text', placeholder: 'Reason (optional)', value: reason, onChange: e => setReason(e.target.value), style: { flex: 1, background: 'var(--bg-dark)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 10px', borderRadius: 4, fontSize: 13 } }),
+      React.createElement('label', { style: { fontSize: 13, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4 } }, 'Keep qty:',
+        React.createElement('input', { type: 'number', min: 0, value: keepQty, onChange: e => setKeepQty(e.target.value), style: { width: 56, background: 'var(--bg-dark)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px', borderRadius: 4, fontSize: 13, textAlign: 'center' } })
+      ),
+      React.createElement('button', { onClick: save, style: { background: 'var(--accent-green-dim)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)', padding: '5px 14px', borderRadius: 5, cursor: 'pointer', fontSize: 13 } }, 'Save'),
+      overrides[item.ItemName] && React.createElement('button', { onClick: clear, style: { background: 'none', border: '1px solid var(--border)', color: 'var(--accent-red)', padding: '5px 14px', borderRadius: 5, cursor: 'pointer', fontSize: 13 } }, 'Clear'),
+      React.createElement('button', { onClick: onClose, style: { background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16 } }, '✕')
+    )
+  );
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById('root'));
+</script>
+</body>
+</html>
