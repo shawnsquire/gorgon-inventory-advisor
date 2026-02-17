@@ -3,6 +3,7 @@ import type { InventoryExport } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';
 import type { ItemOverride, BuildConfig } from '@/types/recommendations';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
+import type { NpcPriorityStatus } from '@/features/relationships/types';
 
 import { db } from './db';
 import { PLAYER_INVENTORY } from '@/shared/utils/friendlyNames';
@@ -22,6 +23,7 @@ interface AppState {
   overrides: Record<string, ItemOverride>;
   keepQuantities: Record<string, number>;
   buildConfig: BuildConfig | null;
+  npcPriorities: Record<string, NpcPriorityStatus>;
 
   // --- Game Data ---
   indexes: GameDataIndexes | null;
@@ -44,6 +46,9 @@ interface AppState {
 
   setBuildConfig: (config: BuildConfig) => void;
 
+  setNpcPriority: (npcId: string, status: NpcPriorityStatus) => void;
+  clearNpcPriority: (npcId: string) => void;
+
   reset: () => void;
 
   /** Persist current character's data to IndexedDB */
@@ -59,6 +64,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   overrides: {},
   keepQuantities: { ...DEFAULT_KEEP_QUANTITIES },
   buildConfig: null,
+  npcPriorities: {},
 
   indexes: null,
   gameDataLoading: true,
@@ -103,6 +109,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setBuildConfig: (config) => set({ buildConfig: config }),
 
+  setNpcPriority: (npcId, status) => {
+    set((s) => ({ npcPriorities: { ...s.npcPriorities, [npcId]: status } }));
+  },
+
+  clearNpcPriority: (npcId) => {
+    set((s) => {
+      const next = { ...s.npcPriorities };
+      delete next[npcId];
+      return { npcPriorities: next };
+    });
+  },
+
   reset: () => {
     set({
       activeCharacter: null,
@@ -111,6 +129,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       overrides: {},
       keepQuantities: { ...DEFAULT_KEEP_QUANTITIES },
       buildConfig: null,
+      npcPriorities: {},
     });
   },
 
@@ -126,6 +145,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       overrides: state.overrides,
       keepQuantities: state.keepQuantities,
       buildConfig: state.buildConfig,
+      npcPriorities: state.npcPriorities,
       lastImported: Date.now(),
     });
 
@@ -151,6 +171,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       overrides: entry.overrides,
       keepQuantities: { ...DEFAULT_KEEP_QUANTITIES, ...entry.keepQuantities },
       buildConfig: entry.buildConfig,
+      npcPriorities: entry.npcPriorities ?? {},
     });
     return true;
   },

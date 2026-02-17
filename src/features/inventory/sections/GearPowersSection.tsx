@@ -23,6 +23,7 @@ export function GearPowersSection({ item, indexes, build }: Props) {
           const tsysPower = indexes.tsysPowerByInternalName.get(power.Power);
           const skill = tsysPower?.Skill;
           const isBuildRelevant = skill ? allBuildSkills.has(skill) : false;
+          const skillDisplayName = skill ? (indexes.skillsByInternalName.get(skill)?.Name ?? skill) : undefined;
 
           // Get effect description from tier data
           const tierData = tsysPower?.Tiers?.find((t) => t.MinLevel != null && (t.MinLevel ?? 0) <= (power.Tier ?? 0));
@@ -39,9 +40,9 @@ export function GearPowersSection({ item, indexes, build }: Props) {
                 <span className={isBuildRelevant ? 'text-action-green' : 'text-gorgon-text'}>
                   {effectDesc}
                 </span>
-                {skill && (
+                {skillDisplayName && (
                   <span className={`text-xs ml-1 ${isBuildRelevant ? 'text-action-green' : 'text-gorgon-text-dim'}`}>
-                    [{skill}]
+                    [{skillDisplayName}]
                   </span>
                 )}
               </div>

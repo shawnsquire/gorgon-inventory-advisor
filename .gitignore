@@ -5,7 +5,9 @@ dev-dist
 .DS_Store
 .claude/
 .playwright-mcp/
+.cdn-cache/
 console-errors.log
 *.png
 !public/**/*.png
 specs/
+*.tsbuildinfo

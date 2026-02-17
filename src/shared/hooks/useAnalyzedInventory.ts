@@ -13,11 +13,18 @@ export function useAnalyzedInventory(): AnalyzedInventoryItem[] {
   const buildConfig = useAppStore((s) => s.buildConfig);
   const overrides = useAppStore((s) => s.overrides);
   const keepQuantities = useAppStore((s) => s.keepQuantities);
+  const npcPriorities = useAppStore((s) => s.npcPriorities);
 
   return useMemo(() => {
     if (!inventory?.Items || !character || !indexes || !buildConfig) return [];
+    const ignoredNpcIds = new Set(
+      Object.entries(npcPriorities)
+        .filter(([, status]) => status === 'ignored')
+        .map(([id]) => id),
+    );
     return analyzeInventory(
       inventory.Items, character, indexes, buildConfig, overrides, keepQuantities,
+      ignoredNpcIds.size > 0 ? ignoredNpcIds : undefined,
     );
-  }, [inventory, character, indexes, buildConfig, overrides, keepQuantities]);
+  }, [inventory, character, indexes, buildConfig, overrides, keepQuantities, npcPriorities]);
 }

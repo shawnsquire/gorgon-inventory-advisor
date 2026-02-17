@@ -13,7 +13,7 @@ export function getVaultDisplayName(vaultId: string, indexes: GameDataIndexes | 
 
   const vault = indexes.vaultsByInternalName.get(vaultId);
   if (vault) {
-    return `${vault.NpcFriendlyName} (${vault.Area})`;
+    return `${vault.NpcFriendlyName} (${formatArea(vault.Area)})`;
   }
 
   return formatVaultFallback(vaultId);

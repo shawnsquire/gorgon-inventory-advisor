@@ -3,6 +3,7 @@ import type { CharacterExport } from '@/types/character';
 import type { CdnItem } from '@/types/cdn/items';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
 import { analyzeQuestUses } from '@/features/recommendations/questAnalysis';
+import { OverflowModal } from '@/shared/components/OverflowModal';
 
 interface Props {
   item: InventoryItem;
@@ -48,7 +49,15 @@ export function QuestSection({ item, cdnItem, character, indexes }: Props) {
             </div>
           ))}
           {inactive.length > 3 && (
-            <p className="text-xs text-gorgon-text-dim ml-3">...and {inactive.length - 3} more</p>
+            <OverflowModal overflowCount={inactive.length - 3} label="more quests" title="Other Quests">
+              <div className="space-y-1">
+                {inactive.map((m, i) => (
+                  <div key={i} className="text-sm text-gorgon-text-dim pl-3 border-l-2 border-gorgon-border mb-1">
+                    {m.questName} ({m.count} needed)
+                  </div>
+                ))}
+              </div>
+            </OverflowModal>
           )}
         </div>
       )}

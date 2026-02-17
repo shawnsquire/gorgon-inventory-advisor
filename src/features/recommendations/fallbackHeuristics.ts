@@ -123,6 +123,7 @@ export function getHeuristicRecommendation(
   category: ItemCategory,
   keepQuantities: Record<string, number>,
   defaultGemKeep: number,
+  maxStackSize?: number,
 ): { action: ActionType; reason: ReasonEntry } | null {
   const name = item.Name;
   const skills = character.Skills;
@@ -307,7 +308,8 @@ export function getHeuristicRecommendation(
       }
       if (SKIN_NAMES.has(name)) {
         const tanningLevel = skills.Tanning?.Level ?? 0;
-        const kq = keepQty ?? 15;
+        const defaultSkinKeep = maxStackSize ? Math.min(maxStackSize, 20) : 15;
+        const kq = keepQty ?? defaultSkinKeep;
         if (item.StackSize > kq) {
           return {
             action: 'SELL_SOME',
@@ -338,7 +340,9 @@ export function getHeuristicRecommendation(
     }
 
     case ITEM_CATEGORIES.ANIMAL_PART: {
-      const keepQty = keepQuantities[name] ?? 3;
+      const userKeepQty = keepQuantities[name];
+      const defaultKeep = maxStackSize ? Math.min(maxStackSize, 10) : 3;
+      const keepQty = userKeepQty ?? defaultKeep;
       if (keepQty === 0) {
         return {
           action: 'SELL_ALL',

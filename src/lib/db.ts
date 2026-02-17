@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { InventoryExport } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';
 import type { ItemOverride, BuildConfig } from '@/types/recommendations';
+import type { NpcPriorities } from '@/features/relationships/types';
 
 /** Cached CDN game data file */
 export interface GameDataEntry {
@@ -18,6 +19,7 @@ export interface CharacterEntry {
   overrides: Record<string, ItemOverride>;
   keepQuantities: Record<string, number>;
   buildConfig: BuildConfig | null;
+  npcPriorities?: NpcPriorities;
   lastImported: number;
 }
 

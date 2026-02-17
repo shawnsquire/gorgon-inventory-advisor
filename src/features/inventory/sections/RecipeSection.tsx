@@ -1,7 +1,12 @@
+import { useState } from 'react';
 import type { InventoryItem } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
+import type { CdnRecipe } from '@/types/cdn/recipes';
 import { analyzeRecipeUses } from '@/features/recommendations/recipeAnalysis';
+import { OverflowModal } from '@/shared/components/OverflowModal';
+import { RecipeDetailModal } from './RecipeDetailModal';
+import { useAppStore } from '@/lib/store';
 
 interface Props {
   item: InventoryItem;
@@ -10,6 +15,9 @@ interface Props {
 }
 
 export function RecipeSection({ item, character, indexes }: Props) {
+  const inventory = useAppStore((s) => s.inventory);
+  const [selectedRecipe, setSelectedRecipe] = useState<CdnRecipe | null>(null);
+
   const matches = analyzeRecipeUses(item, character, indexes);
 
   if (matches.length === 0) return null;
@@ -27,7 +35,11 @@ export function RecipeSection({ item, character, indexes }: Props) {
         <div className="mb-2">
           <p className="text-xs text-action-green mb-1">Can Craft Now</p>
           {craftable.map((m, i) => (
-            <div key={i} className="text-sm text-gorgon-text pl-3 border-l-2 border-action-green mb-1">
+            <div
+              key={i}
+              className="text-sm text-gorgon-text pl-3 border-l-2 border-action-green mb-1 cursor-pointer hover:bg-gorgon-hover rounded-r px-1 py-0.5"
+              onClick={() => setSelectedRecipe(m.recipe)}
+            >
               <span className="font-medium">{m.recipe.Name ?? m.recipe.InternalName}</span>
               <span className="text-gorgon-text-dim ml-1">
                 ({m.recipe.Skill} {m.recipe.SkillLevelReq})
@@ -46,9 +58,26 @@ export function RecipeSection({ item, character, indexes }: Props) {
             </div>
           ))}
           {future.length > 5 && (
-            <p className="text-xs text-gorgon-text-dim ml-3">...and {future.length - 5} more</p>
+            <OverflowModal overflowCount={future.length - 5} label="more recipes" title="Future Recipes">
+              <div className="space-y-1">
+                {future.map((m, i) => (
+                  <div key={i} className="text-sm text-gorgon-text-dim pl-3 border-l-2 border-gorgon-border mb-1">
+                    {m.reason}
+                  </div>
+                ))}
+              </div>
+            </OverflowModal>
           )}
         </div>
+      )}
+
+      {selectedRecipe && inventory?.Items && (
+        <RecipeDetailModal
+          recipe={selectedRecipe}
+          indexes={indexes}
+          inventoryItems={inventory.Items}
+          onClose={() => setSelectedRecipe(null)}
+        />
       )}
     </div>
   );
