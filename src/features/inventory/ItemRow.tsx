@@ -4,7 +4,7 @@ import type { GameDataIndexes } from '@/lib/cdn-indexes';
 import { ActionBadge, RarityBadge } from '@/shared/components/Badge';
 import { getVaultShortName } from '@/shared/utils/friendlyNames';
 import { formatGold } from '@/shared/utils/formatting';
-import { getGearSkills } from '@/features/recommendations/gearScoring';
+import { getGearSkillsFriendly } from '@/features/recommendations/gearScoring';
 import { getIconUrl } from '@/lib/cdn';
 
 interface Props {
@@ -16,7 +16,7 @@ interface Props {
 export const ItemRow = memo(function ItemRow({ item, onItemClick, indexes }: Props) {
   const rec = item.recommendation;
   const totalValue = item.Value * item.StackSize;
-  const gearSkills = item.Slot ? getGearSkills(item, indexes) : [];
+  const gearSkills = item.Slot ? getGearSkillsFriendly(item, indexes) : [];
   const vaultName = getVaultShortName(item.StorageVault ?? '', indexes);
   const cdnItem = indexes.itemsByTypeId.get(item.TypeID);
 

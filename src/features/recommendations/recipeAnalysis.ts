@@ -52,6 +52,9 @@ export function analyzeRecipeUses(
 
 /**
  * Calculate how many of an item to keep based on recipe ingredient requirements.
+ * Sums across all relevant recipes (player needs stock for all of them).
+ * Known recipes get 10x multiplier, speculative recipes get 3x.
+ * Capped at MaxStackSize.
  */
 export function calculateRecipeKeepQuantity(
   item: InventoryItem,
@@ -61,22 +64,29 @@ export function calculateRecipeKeepQuantity(
   const recipes = indexes.recipesByIngredient.get(item.TypeID);
   if (!recipes) return null;
 
-  let maxNeeded = 0;
+  let totalNeeded = 0;
 
   for (const recipe of recipes) {
-    // Only count recipes the character knows or is working toward
     const hasRecipe = recipe.InternalName in character.RecipeCompletions;
     const skillLevel = character.Skills[recipe.Skill]?.Level ?? 0;
 
-    if (hasRecipe || skillLevel > 0) {
-      for (const ing of recipe.Ingredients) {
-        if (ing.ItemCode === item.TypeID) {
-          // Keep enough for a few crafts (stack size from recipe * 3)
-          maxNeeded = Math.max(maxNeeded, ing.StackSize * 3);
-        }
-      }
+    // Skip recipes the character has no connection to
+    if (!hasRecipe && skillLevel <= 0) continue;
+
+    for (const ing of recipe.Ingredients) {
+      if (ing.ItemCode !== item.TypeID) continue;
+      // 10x for known recipes (actively crafted), 3x for speculative
+      totalNeeded += ing.StackSize * (hasRecipe ? 10 : 3);
     }
   }
 
-  return maxNeeded > 0 ? maxNeeded : null;
+  if (totalNeeded === 0) return null;
+
+  // Cap keep quantity at MaxStackSize if available
+  const cdnItem = indexes.itemsByTypeId.get(item.TypeID);
+  if (cdnItem?.MaxStackSize && totalNeeded > cdnItem.MaxStackSize) {
+    totalNeeded = cdnItem.MaxStackSize;
+  }
+
+  return totalNeeded;
 }

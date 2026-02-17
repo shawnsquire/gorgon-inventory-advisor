@@ -5,7 +5,7 @@ import { ACTIONS } from '@/types/recommendations';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
 import type { CdnItem } from '@/types/cdn/items';
 import { DEFAULT_GEM_KEEP } from '@/lib/store';
-import { scoreGear, getGearSkills } from './gearScoring';
+import { scoreGear, getGearSkills, getGearSkillsFriendly, inferGearSkills } from './gearScoring';
 import { analyzeRecipeUses, calculateRecipeKeepQuantity } from './recipeAnalysis';
 import { analyzeQuestUses, hasActiveQuestMatch } from './questAnalysis';
 import { analyzeGiftPotential, shouldSuggestGift } from './giftAnalysis';
@@ -38,6 +38,7 @@ export function getRecommendation(
   build: BuildConfig,
   overrides: Record<string, ItemOverride>,
   keepQuantities: Record<string, number>,
+  ignoredNpcIds?: Set<string>,
 ): Recommendation {
   const cdnItem = indexes.itemsByTypeId.get(item.TypeID);
   const category = categorizeItem(item, cdnItem);
@@ -112,14 +113,18 @@ export function getRecommendation(
       };
       reasons.push(reason);
 
-      if (recipeKeepQty && item.StackSize > recipeKeepQty) {
-        return {
-          action: ACTIONS.SELL_SOME,
-          reasons: [reason],
-          summary: `Keep ${recipeKeepQty} for crafting, sell rest`,
-          keepQuantity: recipeKeepQty,
-          category,
-        };
+      // Only suggest selling with a buffer to avoid petty "sell 2 out of 12" recs
+      if (recipeKeepQty != null) {
+        const sellThreshold = Math.max(recipeKeepQty + 5, Math.ceil(recipeKeepQty * 1.2));
+        if (item.StackSize > sellThreshold) {
+          return {
+            action: ACTIONS.SELL_SOME,
+            reasons: [reason],
+            summary: `Keep ${recipeKeepQty} for crafting, sell rest`,
+            keepQuantity: recipeKeepQty,
+            category,
+          };
+        }
       }
 
       return {
@@ -164,7 +169,7 @@ export function getRecommendation(
 
   // --- 6. NPC gift check ---
   if (cdnItem) {
-    const giftSuggestions = analyzeGiftPotential(item, cdnItem, character, indexes);
+    const giftSuggestions = analyzeGiftPotential(item, cdnItem, character, indexes, ignoredNpcIds);
     if (shouldSuggestGift(giftSuggestions, item.Value) && giftSuggestions[0]) {
       const topGift = giftSuggestions[0];
       return {
@@ -181,8 +186,9 @@ export function getRecommendation(
   }
 
   // --- 7. Fallback heuristics ---
+  const maxStackSize = cdnItem?.MaxStackSize;
   const heuristic = getHeuristicRecommendation(
-    item, cdnItem, character, category, keepQuantities, DEFAULT_GEM_KEEP,
+    item, cdnItem, character, category, keepQuantities, DEFAULT_GEM_KEEP, maxStackSize,
   );
 
   if (heuristic) {
@@ -217,9 +223,40 @@ function evaluateEquipment(
   category: string,
 ): Recommendation {
   const gearScore = scoreGear(item, character, build, indexes);
-  const gearSkills = getGearSkills(item, indexes);
-  const maxCombat = getMaxCombatLevel(character, build);
+  let gearSkills = getGearSkills(item, indexes);
+  let confidence: 'high' | 'medium' | 'low' = 'high';
 
+  // Bug 3 fix: when TSysPowers don't resolve, try inference
+  if (gearSkills.length === 0) {
+    gearSkills = inferGearSkills(item, indexes);
+    confidence = 'medium';
+  }
+
+  // If still empty after inference, EVALUATE instead of SELL_ALL
+  if (gearSkills.length === 0) {
+    const rarity = item.Rarity ?? 'Common';
+    const level = item.Level ?? 0;
+    return {
+      action: ACTIONS.EVALUATE,
+      reasons: [{
+        type: 'equipment',
+        text: `${rarity} L${level} \u2014 unable to determine skills, review manually`,
+        confidence: 'low',
+      }],
+      summary: `${rarity} L${level} \u2014 unable to determine skills, review manually`,
+      gearScore,
+      category,
+    };
+  }
+
+  const gearSkillsDisplay = getGearSkillsFriendly(item, indexes);
+  // If friendly names came back empty (inference path), build display from inferred skills
+  const displayNames = gearSkillsDisplay.length > 0
+    ? gearSkillsDisplay
+    : gearSkills.map((s) => indexes.skillsByInternalName.get(s)?.Name ?? s);
+  const displayStr = displayNames.join('/');
+
+  const maxCombat = getMaxCombatLevel(character, build);
   const allBuildSkills = new Set([...build.primarySkills, ...build.supportSkills]);
   const hasBuildSkill = gearSkills.some((s) => allBuildSkills.has(s));
   const hasPrimarySkill = gearSkills.some((s) => build.primarySkills.includes(s));
@@ -233,10 +270,10 @@ function evaluateEquipment(
       action: ACTIONS.KEEP,
       reasons: [{
         type: 'equipment',
-        text: `Endgame ${gearSkills.join('/')} gear \u2014 save for later`,
-        confidence: 'high',
+        text: `Endgame ${displayStr} gear \u2014 save for later`,
+        confidence,
       }],
-      summary: `Endgame ${gearSkills.join('/')} gear \u2014 save for later`,
+      summary: `Endgame ${displayStr} gear \u2014 save for later`,
       gearScore,
       category,
     };
@@ -249,7 +286,7 @@ function evaluateEquipment(
       reasons: [{
         type: 'equipment',
         text: `Current-tier ${rarity} gear for your build`,
-        confidence: 'high',
+        confidence,
       }],
       summary: `Current-tier ${rarity} gear for your build`,
       gearScore,
@@ -264,7 +301,7 @@ function evaluateEquipment(
       reasons: [{
         type: 'equipment',
         text: `Outleveled ${rarity} L${level} \u2014 distill for phlogiston`,
-        confidence: 'high',
+        confidence,
       }],
       summary: `Outleveled ${rarity} L${level} \u2014 distill for phlogiston`,
       gearScore,
@@ -278,51 +315,37 @@ function evaluateEquipment(
       action: ACTIONS.EVALUATE,
       reasons: [{
         type: 'equipment',
-        text: `${rarity} L${level} ${gearSkills.join('/')} \u2014 compare to current gear`,
-        confidence: 'medium',
+        text: `${rarity} L${level} ${displayStr} \u2014 compare to current gear`,
+        confidence,
       }],
-      summary: `${rarity} L${level} ${gearSkills.join('/')} \u2014 compare to current gear`,
+      summary: `${rarity} L${level} ${displayStr} \u2014 compare to current gear`,
       gearScore,
       category,
     };
   }
 
   // Off-build gear
-  if (!hasBuildSkill) {
-    if (['Legendary', 'Epic'].includes(rarity)) {
-      return {
-        action: ACTIONS.DISENCHANT,
-        reasons: [{
-          type: 'equipment',
-          text: `Off-build ${rarity} \u2014 good phlogiston from distilling`,
-          confidence: 'high',
-        }],
-        summary: `Off-build ${rarity} \u2014 good phlogiston from distilling`,
-        gearScore,
-        category,
-      };
-    }
+  if (['Legendary', 'Epic'].includes(rarity)) {
     return {
-      action: ACTIONS.SELL_ALL,
+      action: ACTIONS.DISENCHANT,
       reasons: [{
         type: 'equipment',
-        text: 'Off-build gear, no relevant skills',
-        confidence: 'high',
+        text: `Off-build ${rarity} \u2014 good phlogiston from distilling`,
+        confidence,
       }],
-      summary: 'Off-build gear, no relevant skills',
+      summary: `Off-build ${rarity} \u2014 good phlogiston from distilling`,
       gearScore,
       category,
     };
   }
-
   return {
-    action: ACTIONS.EVALUATE,
+    action: ACTIONS.SELL_ALL,
     reasons: [{
       type: 'equipment',
-      text: `${rarity} L${level} \u2014 review mods`,
-      confidence: 'low',
+      text: 'Off-build gear, no relevant skills',
+      confidence,
     }],
-    summary: `${rarity} L${level} \u2014 review mods`,
+    summary: 'Off-build gear, no relevant skills',
     gearScore,
     category,
   };
@@ -338,6 +361,8 @@ function evaluateAugment(
 ): Recommendation {
   // Check TSysPowers for skill association
   const gearSkills = getGearSkills(item, indexes);
+  const gearSkillsDisplay = getGearSkillsFriendly(item, indexes);
+  const displayStr = gearSkillsDisplay.join('/');
   const allBuildSkills = new Set([...build.primarySkills, ...build.supportSkills, 'AnySkill']);
 
   if (gearSkills.some((s) => allBuildSkills.has(s)) || gearSkills.length === 0) {
@@ -345,10 +370,10 @@ function evaluateAugment(
       action: ACTIONS.KEEP,
       reasons: [{
         type: 'equipment',
-        text: `Augment for ${gearSkills.join('/') || 'general use'} \u2014 save for gear`,
+        text: `Augment for ${displayStr || 'general use'} \u2014 save for gear`,
         confidence: 'medium',
       }],
-      summary: `Augment for ${gearSkills.join('/') || 'general use'} \u2014 save for gear`,
+      summary: `Augment for ${displayStr || 'general use'} \u2014 save for gear`,
       category,
     };
   }
@@ -357,10 +382,10 @@ function evaluateAugment(
     action: ACTIONS.SELL_ALL,
     reasons: [{
       type: 'equipment',
-      text: `Off-build augment (${gearSkills.join('/')})`,
+      text: `Off-build augment (${displayStr})`,
       confidence: 'medium',
     }],
-    summary: `Off-build augment (${gearSkills.join('/')})`,
+    summary: `Off-build augment (${displayStr})`,
     category,
   };
 }
@@ -375,9 +400,10 @@ export function analyzeInventory(
   build: BuildConfig,
   overrides: Record<string, ItemOverride>,
   keepQuantities: Record<string, number>,
+  ignoredNpcIds?: Set<string>,
 ): Array<InventoryItem & { recommendation: Recommendation }> {
   return items.map((item) => ({
     ...item,
-    recommendation: getRecommendation(item, character, indexes, build, overrides, keepQuantities),
+    recommendation: getRecommendation(item, character, indexes, build, overrides, keepQuantities, ignoredNpcIds),
   }));
 }
