@@ -10,12 +10,39 @@ export function AppHeader() {
   // Don't show header on import page
   if (location.pathname === '/import') return null;
 
+  const navLinks = [
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/inventory', label: 'Inventory' },
+    { to: '/relationships', label: 'NPCs' },
+  ];
+
   return (
     <header className="border-b border-gorgon-border bg-gorgon-panel/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center flex-wrap gap-3">
         <Link to="/dashboard" className="font-display text-lg text-gorgon-text-bright tracking-wide shrink-0">
           GIA
         </Link>
+
+        {activeCharacter && (
+          <nav className="flex items-center gap-1 ml-2">
+            {navLinks.map(({ to, label }) => {
+              const isActive = location.pathname.startsWith(to);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className={`px-2.5 py-1 rounded-md text-sm transition-colors ${
+                    isActive
+                      ? 'bg-gorgon-hover text-gorgon-text-bright'
+                      : 'text-gorgon-text-dim hover:text-gorgon-text hover:bg-gorgon-hover/50'
+                  }`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         <div className="flex-1" />
 

@@ -2,6 +2,7 @@ import type { InventoryItem } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';
 import type { CdnItem } from '@/types/cdn/items';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
+import { itemMatchesPreference } from '@/shared/utils/giftMatching';
 
 export interface GiftSuggestion {
   npcId: string;
@@ -13,40 +14,41 @@ export interface GiftSuggestion {
 
 /**
  * Find NPCs who would appreciate this item as a gift.
- * Matches CDN item keywords against NPC preference index,
- * filtered by character favor levels.
+ * Uses AND logic: ALL keywords in a preference must match the item.
  */
 export function analyzeGiftPotential(
-  _item: InventoryItem,
+  item: InventoryItem,
   cdnItem: CdnItem | undefined,
   character: CharacterExport,
   indexes: GameDataIndexes,
+  ignoredNpcIds?: Set<string>,
 ): GiftSuggestion[] {
-  if (!cdnItem?.Keywords) return [];
+  if (!cdnItem) return [];
 
   const suggestions: GiftSuggestion[] = [];
   const seenNpcs = new Set<string>();
 
-  for (const keyword of cdnItem.Keywords) {
-    const prefs = indexes.npcPreferenceIndex.get(keyword);
-    if (!prefs) continue;
+  for (const [npcId, npc] of indexes.npcById) {
+    if (!npc.Preferences) continue;
+    if (ignoredNpcIds?.has(npcId)) continue;
 
-    for (const pref of prefs) {
-      if (seenNpcs.has(pref.npcId)) continue;
-      seenNpcs.add(pref.npcId);
+    for (const pref of npc.Preferences) {
+      if (pref.Desire !== 'Like' && pref.Desire !== 'Love') continue;
 
-      // Only suggest positive preferences (Desire = "Like" or "Love")
-      if (pref.desire !== 'Like' && pref.desire !== 'Love') continue;
+      // ALL keywords must match (AND logic)
+      if (!itemMatchesPreference(pref, cdnItem, item)) continue;
 
-      // Get player's current favor with this NPC
-      const npcFavor = character.NPCs[pref.npcId];
+      if (seenNpcs.has(npcId)) continue;
+      seenNpcs.add(npcId);
+
+      const npcFavor = character.NPCs[npcId];
       const playerFavor = npcFavor?.FavorLevel ?? 'Unknown';
 
       suggestions.push({
-        npcId: pref.npcId,
-        npcName: pref.npcName,
-        desire: pref.desire,
-        pref: pref.pref,
+        npcId,
+        npcName: npc.Name,
+        desire: pref.Desire,
+        pref: pref.Pref,
         playerFavor,
       });
     }

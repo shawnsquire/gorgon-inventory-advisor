@@ -12,6 +12,8 @@ export interface CdnItem {
   EquipSlot?: string;
   EquipAppearance?: string;
   ItemJsonId?: number;
+  MaxStackSize?: number;
+  SkillReqs?: Record<string, number>;
 }
 
 export interface CdnItemBehavior {

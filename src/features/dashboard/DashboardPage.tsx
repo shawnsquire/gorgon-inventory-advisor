@@ -7,6 +7,7 @@ import { GoldSummaryCard } from './GoldSummaryCard';
 import { StorageSection } from './StorageSection';
 import { ActionBreakdownCard } from './ActionBreakdownCard';
 import { CharacterPanel } from './CharacterPanel';
+import { NpcPriorityWidget } from './NpcPriorityWidget';
 import { EmptyState } from '@/shared/components/EmptyState';
 
 export function DashboardPage() {
@@ -61,8 +62,9 @@ export function DashboardPage() {
         </div>
 
         {/* Right column */}
-        <div>
+        <div className="space-y-4">
           <ActionBreakdownCard analyzed={analyzed} />
+          <NpcPriorityWidget />
         </div>
       </div>
     </div>

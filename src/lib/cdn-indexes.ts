@@ -3,7 +3,7 @@ import type { CdnItem, CdnItemsFile } from '@/types/cdn/items';
 import type { CdnRecipe, CdnRecipesFile } from '@/types/cdn/recipes';
 import type { CdnQuest, CdnQuestsFile } from '@/types/cdn/quests';
 import type { CdnSkill, CdnSkillsFile } from '@/types/cdn/skills';
-import type { CdnNpcsFile } from '@/types/cdn/npcs';
+import type { CdnNpc, CdnNpcsFile } from '@/types/cdn/npcs';
 import type { CdnStorageVault, CdnStorageVaultsFile } from '@/types/cdn/storagevaults';
 import type { CdnTsysPower, CdnTsysClientInfoFile } from '@/types/cdn/tsysclientinfo';
 import type { CdnSourcesFile, CdnItemSource } from '@/types/cdn/sources';
@@ -36,6 +36,14 @@ export interface GameDataIndexes {
   sourcesByItem: Map<string, CdnItemSource>;
   /** ability InternalName -> CdnAbility */
   abilitiesByInternalName: Map<string, CdnAbility>;
+  /** NPC InternalName -> CdnNpc */
+  npcById: Map<string, CdnNpc>;
+  /** area name -> NPC InternalNames in that area */
+  npcsByArea: Map<string, string[]>;
+  /** result ItemCode -> recipes that produce it */
+  recipesByResultItem: Map<number, CdnRecipe[]>;
+  /** item keyword -> skill InternalNames associated via AssociatedItemKeywords */
+  skillsByItemKeyword: Map<string, string[]>;
 }
 
 export interface QuestItemReq {
@@ -86,6 +94,7 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
   // --- Recipe indexes ---
   const recipesByInternalName = new Map<string, CdnRecipe>();
   const recipesByIngredient = new Map<number, CdnRecipe[]>();
+  const recipesByResultItem = new Map<number, CdnRecipe[]>();
   for (const [key, recipe] of Object.entries(recipes)) {
     recipesByInternalName.set(key, recipe);
     if (recipe.Ingredients) {
@@ -95,6 +104,16 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
           existing.push(recipe);
         } else {
           recipesByIngredient.set(ing.ItemCode, [recipe]);
+        }
+      }
+    }
+    if (recipe.ResultItems) {
+      for (const result of recipe.ResultItems) {
+        const existing = recipesByResultItem.get(result.ItemCode);
+        if (existing) {
+          existing.push(recipe);
+        } else {
+          recipesByResultItem.set(result.ItemCode, [recipe]);
         }
       }
     }
@@ -131,10 +150,21 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
   // --- Skills indexes ---
   const combatSkills = new Set<string>();
   const skillsByInternalName = new Map<string, CdnSkill>();
+  const skillsByItemKeyword = new Map<string, string[]>();
   for (const [key, skill] of Object.entries(skills)) {
     skillsByInternalName.set(key, skill);
     if (skill.Combat) {
       combatSkills.add(key);
+    }
+    if (skill.AssociatedItemKeywords) {
+      for (const keyword of skill.AssociatedItemKeywords) {
+        const existing = skillsByItemKeyword.get(keyword);
+        if (existing) {
+          existing.push(key);
+        } else {
+          skillsByItemKeyword.set(keyword, [key]);
+        }
+      }
     }
   }
 
@@ -144,9 +174,22 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
     tsysPowerByInternalName.set(key, power);
   }
 
-  // --- NPC Preference index ---
+  // --- NPC indexes ---
   const npcPreferenceIndex = new Map<string, NpcPrefEntry[]>();
+  const npcById = new Map<string, CdnNpc>();
+  const npcsByArea = new Map<string, string[]>();
   for (const [npcId, npc] of Object.entries(npcs)) {
+    npcById.set(npcId, npc);
+
+    if (npc.AreaName) {
+      const existing = npcsByArea.get(npc.AreaName);
+      if (existing) {
+        existing.push(npcId);
+      } else {
+        npcsByArea.set(npc.AreaName, [npcId]);
+      }
+    }
+
     if (!npc.Preferences) continue;
     for (const pref of npc.Preferences) {
       if (!pref.Keywords) continue;
@@ -196,8 +239,12 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
     npcPreferenceIndex,
     combatSkills,
     skillsByInternalName,
+    skillsByItemKeyword,
     vaultsByInternalName,
     sourcesByItem,
     abilitiesByInternalName,
+    npcById,
+    npcsByArea,
+    recipesByResultItem,
   };
 }
