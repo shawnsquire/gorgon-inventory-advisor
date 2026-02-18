@@ -6,6 +6,7 @@ import type { CdnItem } from '@/types/cdn/items';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
 import { analyzeGiftPotential, type GiftSuggestion } from '@/features/recommendations/giftAnalysis';
 import { favorRank } from '@/shared/utils/favor';
+import { getWikiUrl } from '@/shared/utils/itemHelpers';
 import { OverflowModal } from '@/shared/components/OverflowModal';
 
 interface Props {
@@ -90,14 +91,26 @@ export function GiftSection({ item, cdnItem, character, indexes }: Props) {
 function NpcGiftRow({ suggestion: s }: { suggestion: GiftSuggestion }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <div>
+      <div className="flex items-center gap-1">
         <Link
           to={`/relationships/${encodeURIComponent(s.npcId)}`}
           className={`font-medium hover:underline ${s.desire === 'Love' ? 'text-action-purple' : 'text-gorgon-text'}`}
         >
           {s.npcName}
         </Link>
-        <span className="text-gorgon-text-dim ml-1">
+        <a
+          href={getWikiUrl(s.npcName)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-action-blue hover:text-action-blue/80 shrink-0"
+          title="View on Wiki"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+        <span className="text-gorgon-text-dim ml-0.5">
           {s.desire}s this
         </span>
       </div>

@@ -50,11 +50,14 @@ export function getUniqueVaults(items: InventoryItem[]): string[] {
  * Count items per vault.
  */
 /**
- * Construct a Project Gorgon wiki URL from an item name.
+ * Construct a Project Gorgon wiki URL from a name (item, NPC, etc.).
  */
-export function getItemWikiUrl(name: string): string {
+export function getWikiUrl(name: string): string {
   return `https://wiki.projectgorgon.com/wiki/${name.replace(/ /g, '_')}`;
 }
+
+/** @deprecated Use getWikiUrl instead */
+export const getItemWikiUrl = getWikiUrl;
 
 export function countByVault(items: InventoryItem[]): Record<string, number> {
   const counts: Record<string, number> = {};

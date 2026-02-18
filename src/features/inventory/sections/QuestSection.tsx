@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import type { InventoryItem } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';
 import type { CdnItem } from '@/types/cdn/items';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
-import { analyzeQuestUses } from '@/features/recommendations/questAnalysis';
+import { analyzeQuestUses, type QuestMatch } from '@/features/recommendations/questAnalysis';
+import { getWikiUrl } from '@/shared/utils/itemHelpers';
 import { OverflowModal } from '@/shared/components/OverflowModal';
 
 interface Props {
@@ -10,6 +12,51 @@ interface Props {
   cdnItem: CdnItem | null;
   character: CharacterExport;
   indexes: GameDataIndexes;
+}
+
+function QuestLink({ quest }: { quest: QuestMatch }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-medium">{quest.questName}</span>
+      <a
+        href={getWikiUrl(quest.questName)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-action-blue hover:text-action-blue/80 shrink-0"
+        title="View on Wiki"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
+      {quest.count > 1 && (
+        <span className="text-gorgon-text-dim">({quest.count} needed)</span>
+      )}
+    </span>
+  );
+}
+
+function SpoilerQuest({ quest }: { quest: QuestMatch }) {
+  const [revealed, setRevealed] = useState(false);
+
+  if (revealed) {
+    return (
+      <div className="text-sm text-gorgon-text-dim pl-3 border-l-2 border-gorgon-border mb-1">
+        <QuestLink quest={quest} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-sm pl-3 border-l-2 border-gorgon-border mb-1">
+      <button
+        onClick={() => setRevealed(true)}
+        className="text-gorgon-text-dim hover:text-gorgon-text transition-colors italic"
+      >
+        Quest (click to reveal)
+      </button>
+    </div>
+  );
 }
 
 export function QuestSection({ item, cdnItem, character, indexes }: Props) {
@@ -31,10 +78,7 @@ export function QuestSection({ item, cdnItem, character, indexes }: Props) {
           <p className="text-xs text-action-blue mb-1">Active Quests</p>
           {active.map((m, i) => (
             <div key={i} className="text-sm text-gorgon-text pl-3 border-l-2 border-action-blue mb-1">
-              <span className="font-medium">{m.questName}</span>
-              {m.count > 1 && (
-                <span className="text-gorgon-text-dim ml-1">({m.count} needed)</span>
-              )}
+              <QuestLink quest={m} />
             </div>
           ))}
         </div>
@@ -42,19 +86,15 @@ export function QuestSection({ item, cdnItem, character, indexes }: Props) {
 
       {inactive.length > 0 && (
         <div>
-          <p className="text-xs text-gorgon-text-dim mb-1">Other Quests</p>
+          <p className="text-xs text-gorgon-text-dim mb-1">Other Quests (spoilers)</p>
           {inactive.slice(0, 3).map((m, i) => (
-            <div key={i} className="text-sm text-gorgon-text-dim pl-3 border-l-2 border-gorgon-border mb-1">
-              {m.questName} ({m.count} needed)
-            </div>
+            <SpoilerQuest key={i} quest={m} />
           ))}
           {inactive.length > 3 && (
             <OverflowModal overflowCount={inactive.length - 3} label="more quests" title="Other Quests">
               <div className="space-y-1">
                 {inactive.map((m, i) => (
-                  <div key={i} className="text-sm text-gorgon-text-dim pl-3 border-l-2 border-gorgon-border mb-1">
-                    {m.questName} ({m.count} needed)
-                  </div>
+                  <SpoilerQuest key={i} quest={m} />
                 ))}
               </div>
             </OverflowModal>

@@ -11,6 +11,7 @@ import { ItemDetailDrawer } from '@/features/inventory/ItemDetailDrawer';
 import { detectBuild } from '@/features/recommendations/buildDetection';
 import { getRecommendation } from '@/features/recommendations/engine';
 import type { NpcRelationshipView, RelationshipMode, NpcGiftItem } from './types';
+import { getWikiUrl } from '@/shared/utils/itemHelpers';
 import type { AnalyzedItem } from '@/features/inventory/InventoryPage';
 
 interface Props {
@@ -73,6 +74,17 @@ export function NpcDetailPanel({ npc, mode, onModeChange, onBack }: Props) {
               {npc.isMet ? 'Met' : 'Not yet met'}
             </p>
           )}
+          <a
+            href={getWikiUrl(npc.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-action-blue hover:underline mt-1"
+          >
+            View on Wiki
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
         </div>
         <NpcPriorityControls npcId={npc.npcId} currentStatus={npc.priority} />
       </div>
