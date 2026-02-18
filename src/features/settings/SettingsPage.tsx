@@ -14,9 +14,13 @@ export function SettingsPage() {
   const indexes = useAppStore((s) => s.indexes);
   const buildConfig = useAppStore((s) => s.buildConfig);
   const overrides = useAppStore((s) => s.overrides);
+  const clearOverride = useAppStore((s) => s.clearOverride);
   const clearAllOverrides = useAppStore((s) => s.clearAllOverrides);
   const persistToDb = useAppStore((s) => s.persistToDb);
   const reset = useAppStore((s) => s.reset);
+
+  const regularOverrides = Object.entries(overrides).filter(([, ov]) => ov.action !== 'ARCHIVE');
+  const archivedOverrides = Object.entries(overrides).filter(([, ov]) => ov.action === 'ARCHIVE');
 
   useEffect(() => {
     if (!inventory) navigate('/import', { replace: true });
@@ -42,15 +46,15 @@ export function SettingsPage() {
 
       {/* Overrides summary */}
       <Card title="Item Overrides">
-        {Object.keys(overrides).length === 0 ? (
+        {regularOverrides.length === 0 ? (
           <p className="text-sm text-gorgon-text-dim">No overrides set. Click items in the inventory view to override recommendations.</p>
         ) : (
           <>
             <p className="text-sm text-gorgon-text-dim mb-3">
-              {Object.keys(overrides).length} item(s) have custom overrides.
+              {regularOverrides.length} item(s) have custom overrides.
             </p>
             <div className="space-y-1 max-h-60 overflow-y-auto">
-              {Object.entries(overrides).map(([name, ov]) => (
+              {regularOverrides.map(([name, ov]) => (
                 <div key={name} className="flex items-center justify-between text-sm bg-gorgon-panel px-3 py-1.5 rounded">
                   <span className="text-gorgon-text">{name}: <span className="text-gorgon-text-dim">{ov.action}</span></span>
                   <span className="text-xs text-gorgon-text-dim">{ov.reason}</span>
@@ -62,6 +66,41 @@ export function SettingsPage() {
               className="mt-3 text-sm text-action-red hover:text-action-red/80 transition-colors"
             >
               Clear all overrides
+            </button>
+          </>
+        )}
+      </Card>
+
+      {/* Archived items */}
+      <Card title="Archived Items">
+        {archivedOverrides.length === 0 ? (
+          <p className="text-sm text-gorgon-text-dim">No archived items. Use the Archive button on items you've already dealt with to hide them from the inventory view.</p>
+        ) : (
+          <>
+            <p className="text-sm text-gorgon-text-dim mb-3">
+              {archivedOverrides.length} item(s) archived. Archived items are hidden from the inventory view and auto-clear on re-import.
+            </p>
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {archivedOverrides.map(([name]) => (
+                <div key={name} className="flex items-center justify-between text-sm bg-gorgon-panel px-3 py-1.5 rounded">
+                  <span className="text-gorgon-text">{name}</span>
+                  <button
+                    onClick={() => { clearOverride(name); void persistToDb(); }}
+                    className="text-xs text-gorgon-text-dim hover:text-gorgon-text transition-colors"
+                  >
+                    Unarchive
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                for (const [name] of archivedOverrides) clearOverride(name);
+                void persistToDb();
+              }}
+              className="mt-3 text-sm text-action-red hover:text-action-red/80 transition-colors"
+            >
+              Unarchive all
             </button>
           </>
         )}

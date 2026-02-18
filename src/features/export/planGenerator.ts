@@ -7,7 +7,7 @@ type AnalyzedItem = InventoryItem & { recommendation: Recommendation };
 
 const ACTION_ORDER: ActionType[] = [
   'SELL_ALL', 'SELL_SOME', 'DISENCHANT', 'USE', 'GIFT',
-  'LEVEL_LATER', 'EVALUATE', 'INGREDIENT', 'DEPLOY', 'QUEST', 'KEEP',
+  'LEVEL_LATER', 'INGREDIENT', 'DEPLOY', 'QUEST', 'USE_COMBAT', 'KEEP', 'ARCHIVE',
 ];
 
 export function generateTextPlan(items: AnalyzedItem[], characterName: string): string {
@@ -48,7 +48,8 @@ export function generateTextPlan(items: AnalyzedItem[], characterName: string): 
       const qty = item.StackSize > 1 ? ` x${item.StackSize}` : '';
       const value = item.Value * item.StackSize;
       const valueStr = value > 0 ? ` (${formatGold(value)})` : '';
-      lines.push(`    ${item.Name}${qty}${valueStr}`);
+      const uncMarker = item.recommendation.uncertain ? ' [?]' : '';
+      lines.push(`    ${item.Name}${qty}${valueStr}${uncMarker}`);
       lines.push(`      -> ${item.recommendation.summary}`);
     }
     lines.push('');
@@ -72,7 +73,7 @@ export function generateTextPlan(items: AnalyzedItem[], characterName: string): 
 }
 
 export function generateCsvPlan(items: AnalyzedItem[]): string {
-  const headers = ['Action', 'Item Name', 'Vault', 'Category', 'Quantity', 'Value Each', 'Total Value', 'Reason', 'Rarity', 'Level', 'Gear Score'];
+  const headers = ['Action', 'Item Name', 'Vault', 'Category', 'Quantity', 'Value Each', 'Total Value', 'Reason', 'Rarity', 'Level', 'Gear Score', 'Uncertain'];
   const rows = [headers.join(',')];
 
   const sorted = [...items].sort((a, b) =>
@@ -93,6 +94,7 @@ export function generateCsvPlan(items: AnalyzedItem[]): string {
       item.Rarity ?? '',
       item.Level ?? '',
       rec.gearScore ?? '',
+      rec.uncertain ? 'Yes' : '',
     ];
     rows.push(row.join(','));
   }

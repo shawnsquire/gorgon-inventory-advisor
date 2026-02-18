@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/lib/store';
 import { detectBuild } from '@/features/recommendations/buildDetection';
@@ -31,7 +31,11 @@ export function DashboardPage() {
     }
   }, [character, indexes, buildConfig, setBuildConfig]);
 
-  const analyzed = useAnalyzedInventory();
+  const allAnalyzed = useAnalyzedInventory();
+  const analyzed = useMemo(
+    () => allAnalyzed.filter((i) => i.recommendation.action.type !== 'ARCHIVE'),
+    [allAnalyzed],
+  );
 
   if (!inventory || !character || !indexes || !buildConfig) {
     return <EmptyState icon="&#9876;" title="Loading..." description="Preparing your inventory analysis" />;

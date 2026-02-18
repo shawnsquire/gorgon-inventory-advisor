@@ -16,12 +16,13 @@ const ACTION_COLORS: Record<ActionType, string> = {
   SELL_SOME: 'bg-action-yellow',
   DISENCHANT: 'bg-action-purple',
   USE: 'bg-action-cyan',
+  USE_COMBAT: 'bg-action-teal',
   QUEST: 'bg-action-blue',
   LEVEL_LATER: 'bg-action-orange',
-  EVALUATE: 'bg-gorgon-text-dim',
   INGREDIENT: 'bg-action-green',
   DEPLOY: 'bg-action-cyan',
   GIFT: 'bg-action-purple',
+  ARCHIVE: 'bg-gray-500',
 };
 
 const ACTION_TEXT_COLORS: Record<ActionType, string> = {
@@ -30,22 +31,27 @@ const ACTION_TEXT_COLORS: Record<ActionType, string> = {
   SELL_SOME: 'text-action-yellow',
   DISENCHANT: 'text-action-purple',
   USE: 'text-action-cyan',
+  USE_COMBAT: 'text-action-teal',
   QUEST: 'text-action-blue',
   LEVEL_LATER: 'text-action-orange',
-  EVALUATE: 'text-gorgon-text-dim',
   INGREDIENT: 'text-action-green',
   DEPLOY: 'text-action-cyan',
   GIFT: 'text-action-purple',
+  ARCHIVE: 'text-gray-400',
 };
 
 export function ActionBreakdownCard({ analyzed }: Props) {
   const navigate = useNavigate();
 
-  // Count by action type
+  // Count by action type + uncertain subcounts
   const counts: Partial<Record<ActionType, number>> = {};
+  const uncertainCounts: Partial<Record<ActionType, number>> = {};
   for (const item of analyzed) {
     const type = item.recommendation.action.type;
     counts[type] = (counts[type] ?? 0) + 1;
+    if (item.recommendation.uncertain) {
+      uncertainCounts[type] = (uncertainCounts[type] ?? 0) + 1;
+    }
   }
 
   const sorted = Object.entries(counts)
@@ -59,6 +65,7 @@ export function ActionBreakdownCard({ analyzed }: Props) {
         {sorted.map(([actionType, count]) => {
           const pct = total > 0 ? (count / total) * 100 : 0;
           const action = ACTIONS[actionType];
+          const uncCount = uncertainCounts[actionType] ?? 0;
           return (
             <button
               key={actionType}
@@ -72,6 +79,9 @@ export function ActionBreakdownCard({ analyzed }: Props) {
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-xs">{action.icon}</span>
                   <span className="text-sm text-gorgon-text">{action.label}</span>
+                  {uncCount > 0 && (
+                    <span className="text-[11px] text-action-yellow font-mono">({uncCount}?)</span>
+                  )}
                 </div>
                 <div className="w-full h-1.5 bg-gorgon-dark rounded-full overflow-hidden">
                   <div
