@@ -3,10 +3,40 @@ import type { InventoryExport } from '@/types/inventory';
 import type { CharacterExport } from '@/types/character';
 import type { ItemOverride, BuildConfig } from '@/types/recommendations';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
-import type { NpcPriorityStatus } from '@/features/relationships/types';
+import type { NpcPriorityStatus, RelationshipFilterState, RelationshipMode } from '@/features/relationships/types';
 
 import { db } from './db';
 import { PLAYER_INVENTORY } from '@/shared/utils/friendlyNames';
+
+// --- Session-level filter state (survives navigation, not persisted to DB) ---
+
+export interface InventoryFilterState {
+  search: string;
+  filterVault: string;
+  filterAction: string;
+  filterCategory: string;
+  sortBy: string;
+  filterUncertain: boolean;
+}
+
+export const DEFAULT_INVENTORY_FILTERS: InventoryFilterState = {
+  search: '',
+  filterVault: 'all',
+  filterAction: 'all',
+  filterCategory: 'all',
+  sortBy: 'action',
+  filterUncertain: false,
+};
+
+export const DEFAULT_RELATIONSHIP_FILTERS: RelationshipFilterState = {
+  search: '',
+  areaFilter: 'all',
+  desireFilter: 'all',
+  priorityFilter: 'all',
+  favorFilter: 'all',
+  metFilter: 'all',
+  itemSearch: '',
+};
 
 // --- Default keep quantities ---
 export const DEFAULT_KEEP_QUANTITIES: Record<string, number> = {};
@@ -30,6 +60,11 @@ interface AppState {
   gameDataLoading: boolean;
   gameDataError: string | null;
 
+  // --- Session Filters (survive navigation, not persisted to DB) ---
+  inventoryFilters: InventoryFilterState;
+  relationshipFilters: RelationshipFilterState;
+  relationshipMode: RelationshipMode;
+
   // --- Actions ---
   setInventory: (data: InventoryExport) => void;
   setCharacter: (data: CharacterExport) => void;
@@ -48,6 +83,10 @@ interface AppState {
 
   setNpcPriority: (npcId: string, status: NpcPriorityStatus) => void;
   clearNpcPriority: (npcId: string) => void;
+
+  setInventoryFilters: (filters: Partial<InventoryFilterState>) => void;
+  setRelationshipFilters: (filters: Partial<RelationshipFilterState>) => void;
+  setRelationshipMode: (mode: RelationshipMode) => void;
 
   reset: () => void;
 
@@ -70,11 +109,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   gameDataLoading: true,
   gameDataError: null,
 
+  inventoryFilters: { ...DEFAULT_INVENTORY_FILTERS },
+  relationshipFilters: { ...DEFAULT_RELATIONSHIP_FILTERS },
+  relationshipMode: 'opportunistic',
+
   setInventory: (data) => {
     for (const item of data.Items) {
       if (!item.StorageVault) item.StorageVault = PLAYER_INVENTORY;
     }
-    set({ inventory: data, activeCharacter: data.Character });
+    // Auto-clear ARCHIVE overrides on re-import
+    const prevOverrides = get().overrides;
+    const cleaned: Record<string, import('@/types/recommendations').ItemOverride> = {};
+    for (const [key, ov] of Object.entries(prevOverrides)) {
+      if (ov.action !== 'ARCHIVE') cleaned[key] = ov;
+    }
+    set({ inventory: data, activeCharacter: data.Character, overrides: cleaned });
   },
 
   setCharacter: (data) => {
@@ -120,6 +169,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { npcPriorities: next };
     });
   },
+
+  setInventoryFilters: (filters) => {
+    set((s) => ({ inventoryFilters: { ...s.inventoryFilters, ...filters } }));
+  },
+
+  setRelationshipFilters: (filters) => {
+    set((s) => ({ relationshipFilters: { ...s.relationshipFilters, ...filters } }));
+  },
+
+  setRelationshipMode: (mode) => set({ relationshipMode: mode }),
 
   reset: () => {
     set({

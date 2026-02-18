@@ -24,23 +24,27 @@ export function InventoryPage() {
   const buildConfig = useAppStore((s) => s.buildConfig);
   const setBuildConfig = useAppStore((s) => s.setBuildConfig);
 
+  const inventoryFilters = useAppStore((s) => s.inventoryFilters);
+  const setInventoryFilters = useAppStore((s) => s.setInventoryFilters);
+
   const [selectedItem, setSelectedItem] = useState<AnalyzedItem | null>(null);
 
-  // Filters
-  const [search, setSearch] = useState('');
-  const [filterVault, setFilterVault] = useState(vaultParam ? decodeURIComponent(vaultParam) : 'all');
-  const [filterAction, setFilterAction] = useState<string>(actionParam ?? 'all');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [sortBy, setSortBy] = useState('action');
+  const { search, filterVault, filterAction, filterCategory, sortBy, filterUncertain } = inventoryFilters;
+  const setSearch = useCallback((v: string) => setInventoryFilters({ search: v }), [setInventoryFilters]);
+  const setFilterVault = useCallback((v: string) => setInventoryFilters({ filterVault: v }), [setInventoryFilters]);
+  const setFilterAction = useCallback((v: string) => setInventoryFilters({ filterAction: v }), [setInventoryFilters]);
+  const setFilterCategory = useCallback((v: string) => setInventoryFilters({ filterCategory: v }), [setInventoryFilters]);
+  const setSortBy = useCallback((v: string) => setInventoryFilters({ sortBy: v }), [setInventoryFilters]);
+  const setFilterUncertain = useCallback((v: boolean) => setInventoryFilters({ filterUncertain: v }), [setInventoryFilters]);
 
   // Sync URL params to filter state
   useEffect(() => {
     if (vaultParam) setFilterVault(decodeURIComponent(vaultParam));
-  }, [vaultParam]);
+  }, [vaultParam, setFilterVault]);
 
   useEffect(() => {
     if (actionParam) setFilterAction(actionParam);
-  }, [actionParam]);
+  }, [actionParam, setFilterAction]);
 
   // Redirect to import if no data
   useEffect(() => {
@@ -65,13 +69,23 @@ export function InventoryPage() {
   const vaults = useMemo(() => [...new Set(analyzed.map((i) => i.StorageVault ?? ''))].sort(), [analyzed]);
   const categories = useMemo(() => [...new Set(analyzed.map((i) => i.recommendation.category))].sort(), [analyzed]);
 
+  // Count uncertain items (before filtering)
+  const uncertainCount = useMemo(() => analyzed.filter((i) => i.recommendation.uncertain).length, [analyzed]);
+
+  // Count archived items (before filtering)
+  const archivedCount = useMemo(() => analyzed.filter((i) => i.recommendation.action.type === 'ARCHIVE').length, [analyzed]);
+
   // Apply filters and sort
   const filtered = useMemo(() => {
     let items = analyzed;
 
+    // Hide archived items unless explicitly filtering by ARCHIVE
+    if (filterAction !== 'ARCHIVE') items = items.filter((i) => i.recommendation.action.type !== 'ARCHIVE');
+
     if (filterVault !== 'all') items = items.filter((i) => i.StorageVault === filterVault);
     if (filterAction !== 'all') items = items.filter((i) => i.recommendation.action.type === filterAction);
     if (filterCategory !== 'all') items = items.filter((i) => i.recommendation.category === filterCategory);
+    if (filterUncertain) items = items.filter((i) => i.recommendation.uncertain);
     if (search) {
       const s = search.toLowerCase();
       items = items.filter((i) => i.Name.toLowerCase().includes(s));
@@ -80,12 +94,17 @@ export function InventoryPage() {
     // Sort
     if (sortBy === 'action') {
       const order: ActionType[] = [
-        'SELL_ALL', 'SELL_SOME', 'DISENCHANT', 'USE', 'EVALUATE',
-        'LEVEL_LATER', 'INGREDIENT', 'DEPLOY', 'GIFT', 'QUEST', 'KEEP',
+        'SELL_ALL', 'SELL_SOME', 'DISENCHANT', 'USE',
+        'LEVEL_LATER', 'INGREDIENT', 'DEPLOY', 'GIFT', 'QUEST', 'USE_COMBAT', 'KEEP', 'ARCHIVE',
       ];
-      items = [...items].sort(
-        (a, b) => order.indexOf(a.recommendation.action.type) - order.indexOf(b.recommendation.action.type),
-      );
+      items = [...items].sort((a, b) => {
+        const orderDiff = order.indexOf(a.recommendation.action.type) - order.indexOf(b.recommendation.action.type);
+        if (orderDiff !== 0) return orderDiff;
+        // Within same action group, uncertain items first
+        const aUnc = a.recommendation.uncertain ? 0 : 1;
+        const bUnc = b.recommendation.uncertain ? 0 : 1;
+        return aUnc - bUnc;
+      });
     } else if (sortBy === 'value') {
       items = [...items].sort((a, b) => (b.Value * b.StackSize) - (a.Value * a.StackSize));
     } else if (sortBy === 'name') {
@@ -97,7 +116,7 @@ export function InventoryPage() {
     }
 
     return items;
-  }, [analyzed, filterVault, filterAction, filterCategory, search, sortBy]);
+  }, [analyzed, filterVault, filterAction, filterCategory, filterUncertain, search, sortBy]);
 
   const handleItemClick = useCallback((item: AnalyzedItem) => {
     setSelectedItem(item);
@@ -120,9 +139,13 @@ export function InventoryPage() {
         onCategoryChange={setFilterCategory}
         sortBy={sortBy}
         onSortChange={setSortBy}
+        filterUncertain={filterUncertain}
+        onUncertainChange={setFilterUncertain}
         vaults={vaults}
         categories={categories}
         totalCount={filtered.length}
+        uncertainCount={uncertainCount}
+        archivedCount={archivedCount}
         indexes={indexes}
       />
 

@@ -7,29 +7,33 @@ import { NpcFilters } from './NpcFilters';
 import { NpcList } from './NpcList';
 import { NpcDetailPanel } from './NpcDetailPanel';
 import { useNpcRelationships } from './useNpcRelationships';
-import type { RelationshipFilterState, RelationshipMode } from './types';
+import type { RelationshipFilterState } from './types';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
-
-const DEFAULT_FILTERS: RelationshipFilterState = {
-  search: '',
-  areaFilter: 'all',
-  desireFilter: 'all',
-  priorityFilter: 'all',
-  favorFilter: 'all',
-  metFilter: 'all',
-  itemSearch: '',
-};
 
 export function RelationshipsPage() {
   const navigate = useNavigate();
   const { npcId: npcIdParam } = useParams();
   const inventory = useAppStore((s) => s.inventory);
   const indexes = useAppStore((s) => s.indexes);
+  const filters = useAppStore((s) => s.relationshipFilters);
+  const setFiltersPartial = useAppStore((s) => s.setRelationshipFilters);
+  const mode = useAppStore((s) => s.relationshipMode);
+  const setMode = useAppStore((s) => s.setRelationshipMode);
+
+  const setFilters = useCallback(
+    (update: RelationshipFilterState | ((prev: RelationshipFilterState) => RelationshipFilterState)) => {
+      if (typeof update === 'function') {
+        const current = useAppStore.getState().relationshipFilters;
+        setFiltersPartial(update(current));
+      } else {
+        setFiltersPartial(update);
+      }
+    },
+    [setFiltersPartial],
+  );
 
   const [selectedNpcId, setSelectedNpcId] = useState<string | null>(npcIdParam ?? null);
   const [showDetail, setShowDetail] = useState(!!npcIdParam);
-  const [filters, setFilters] = useState<RelationshipFilterState>(DEFAULT_FILTERS);
-  const [mode, setMode] = useState<RelationshipMode>('opportunistic');
 
   // Redirect to import if no data
   useEffect(() => {

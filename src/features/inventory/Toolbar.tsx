@@ -13,9 +13,13 @@ interface Props {
   onCategoryChange: (v: string) => void;
   sortBy: string;
   onSortChange: (v: string) => void;
+  filterUncertain: boolean;
+  onUncertainChange: (v: boolean) => void;
   vaults: string[];
   categories: string[];
   totalCount: number;
+  uncertainCount: number;
+  archivedCount: number;
   indexes: GameDataIndexes;
 }
 
@@ -33,7 +37,8 @@ export function Toolbar({
   filterAction, onActionChange,
   filterCategory, onCategoryChange,
   sortBy, onSortChange,
-  vaults, categories, totalCount,
+  filterUncertain, onUncertainChange,
+  vaults, categories, totalCount, uncertainCount, archivedCount,
   indexes,
 }: Props) {
   return (
@@ -55,7 +60,7 @@ export function Toolbar({
 
       <select value={filterAction} onChange={(e) => onActionChange(e.target.value)} className={selectClass}>
         <option value="all">All Actions</option>
-        {(Object.keys(ACTIONS) as ActionType[]).map((key) => (
+        {(Object.keys(ACTIONS) as ActionType[]).filter((key) => key !== 'ARCHIVE').map((key) => (
           <option key={key} value={key}>{ACTIONS[key].icon} {ACTIONS[key].label}</option>
         ))}
       </select>
@@ -75,7 +80,31 @@ export function Toolbar({
         <option value="score">Sort: Gear Score</option>
       </select>
 
+      {uncertainCount > 0 && (
+        <label className="inline-flex items-center gap-1.5 text-sm text-gorgon-text cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={filterUncertain}
+            onChange={(e) => onUncertainChange(e.target.checked)}
+            className="accent-action-yellow"
+          />
+          <span className="text-action-yellow">?</span> Uncertain only
+        </label>
+      )}
+
       <div className="flex-1" />
+      {archivedCount > 0 && (
+        <button
+          onClick={() => onActionChange(filterAction === 'ARCHIVE' ? 'all' : 'ARCHIVE')}
+          className={`text-sm transition-colors ${
+            filterAction === 'ARCHIVE'
+              ? 'text-gorgon-text-bright underline'
+              : 'text-gorgon-text-dim hover:text-gorgon-text'
+          }`}
+        >
+          {archivedCount} archived
+        </button>
+      )}
       <span className="text-sm text-gorgon-text-dim">{totalCount} items</span>
     </div>
   );
