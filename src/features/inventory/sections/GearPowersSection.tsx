@@ -1,11 +1,32 @@
 import type { InventoryItem } from '@/types/inventory';
 import type { BuildConfig } from '@/types/recommendations';
 import type { GameDataIndexes } from '@/lib/cdn-indexes';
+import type { CdnTsysPower } from '@/types/cdn/tsysclientinfo';
 
 interface Props {
   item: InventoryItem;
   indexes: GameDataIndexes;
   build: BuildConfig;
+}
+
+/** Convert PascalCase internal name to readable text: "DeathsHoldDarknessVuln" → "Deaths Hold Darkness Vuln" */
+function humanizeInternalName(name: string): string {
+  return name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+}
+
+/** Find the best matching tier for a given power tier (highest MinLevel that's still <= tier) */
+function findBestTier(tsysPower: CdnTsysPower, tier: number) {
+  if (!Array.isArray(tsysPower.Tiers)) return undefined;
+  let best: (typeof tsysPower.Tiers)[number] | undefined;
+  for (const t of tsysPower.Tiers) {
+    const minLevel = t.MinLevel ?? 0;
+    if (minLevel <= tier && (!best || minLevel > (best.MinLevel ?? 0))) {
+      best = t;
+    }
+  }
+  return best;
 }
 
 export function GearPowersSection({ item, indexes, build }: Props) {
@@ -25,9 +46,12 @@ export function GearPowersSection({ item, indexes, build }: Props) {
           const isBuildRelevant = skill ? allBuildSkills.has(skill) : false;
           const skillDisplayName = skill ? (indexes.skillsByInternalName.get(skill)?.Name ?? skill) : undefined;
 
-          // Get effect description from tier data
-          const tierData = tsysPower?.Tiers?.find((t) => t.MinLevel != null && (t.MinLevel ?? 0) <= (power.Tier ?? 0));
-          const effectDesc = tierData?.EffectDescs?.[0] ?? tsysPower?.Prefix ?? tsysPower?.Suffix ?? power.Power;
+          // Get effect description from best matching tier
+          const tierData = tsysPower ? findBestTier(tsysPower, power.Tier ?? 0) : undefined;
+          const effectDesc = tierData?.EffectDescs?.[0]
+            ?? tsysPower?.Prefix
+            ?? tsysPower?.Suffix
+            ?? humanizeInternalName(power.Power);
 
           return (
             <div
