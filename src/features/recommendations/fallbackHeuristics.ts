@@ -124,7 +124,7 @@ export function getHeuristicRecommendation(
   keepQuantities: Record<string, number>,
   defaultGemKeep: number,
   maxStackSize?: number,
-): { action: ActionType; reason: ReasonEntry } | null {
+): { action: ActionType; reason: ReasonEntry; uncertain?: boolean } | null {
   const name = item.Name;
   const skills = character.Skills;
 
@@ -221,8 +221,9 @@ export function getHeuristicRecommendation(
         }
       }
       return {
-        action: 'EVALUATE',
+        action: 'LEVEL_LATER',
         reason: { type: 'heuristic', text: 'Recipe \u2014 check if skill is worth leveling', confidence: 'low' },
+        uncertain: true,
       };
     }
 
@@ -235,8 +236,8 @@ export function getHeuristicRecommendation(
       ]);
       if (goodPotions.has(name)) {
         return {
-          action: 'KEEP',
-          reason: { type: 'heuristic', text: 'High-tier consumable \u2014 use in combat', confidence: 'high' },
+          action: 'USE_COMBAT',
+          reason: { type: 'heuristic', text: 'High-tier consumable \u2014 keep for combat', confidence: 'high' },
         };
       }
       if (name === 'Healing Potion' || name === 'Armor Potion') {
@@ -246,8 +247,9 @@ export function getHeuristicRecommendation(
         };
       }
       return {
-        action: 'EVALUATE',
+        action: 'USE_COMBAT',
         reason: { type: 'heuristic', text: 'Potion \u2014 check if you have better versions', confidence: 'low' },
+        uncertain: true,
       };
     }
 
@@ -392,13 +394,13 @@ export function getHeuristicRecommendation(
       }
       if (name.includes('First Aid Kit') || name.includes('Armor Patch Kit')) {
         return {
-          action: 'KEEP',
+          action: 'USE_COMBAT',
           reason: { type: 'heuristic', text: 'Combat supply \u2014 keep stocked', confidence: 'high' },
         };
       }
       return {
-        action: 'KEEP',
-        reason: { type: 'heuristic', text: 'Consumable', confidence: 'low' },
+        action: 'USE_COMBAT',
+        reason: { type: 'heuristic', text: 'Consumable \u2014 keep for combat use', confidence: 'low' },
       };
     }
 

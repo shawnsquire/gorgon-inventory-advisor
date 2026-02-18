@@ -30,7 +30,7 @@ export function scoreGear(
   for (const power of item.TSysPowers) {
     const tsysPower = indexes.tsysPowerByInternalName.get(power.Power);
     totalPowers++;
-    if (tsysPower?.Skill && allBuildSkills.has(tsysPower.Skill)) {
+    if (tsysPower?.Skill && (tsysPower.Skill === 'AnySkill' || allBuildSkills.has(tsysPower.Skill))) {
       matchingPowers++;
     }
   }
@@ -74,7 +74,7 @@ export function scoreGear(
   let powerQuality = 0;
   for (const power of item.TSysPowers) {
     const tsysPower = indexes.tsysPowerByInternalName.get(power.Power);
-    if (tsysPower?.Skill && allBuildSkills.has(tsysPower.Skill)) {
+    if (tsysPower?.Skill && (tsysPower.Skill === 'AnySkill' || allBuildSkills.has(tsysPower.Skill))) {
       // Tier ranges roughly 1-20; normalize
       powerQuality += Math.min(power.Tier / 20, 1);
     }
@@ -97,7 +97,7 @@ export function getGearSkills(
   const skills = new Set<string>();
   for (const power of item.TSysPowers) {
     const tsysPower = indexes.tsysPowerByInternalName.get(power.Power);
-    if (tsysPower?.Skill) {
+    if (tsysPower?.Skill && tsysPower.Skill !== 'AnySkill') {
       skills.add(tsysPower.Skill);
     }
   }

@@ -39,24 +39,31 @@ export function getRecommendation(
   overrides: Record<string, ItemOverride>,
   keepQuantities: Record<string, number>,
   ignoredNpcIds?: Set<string>,
+  skipOverride?: boolean,
 ): Recommendation {
   const cdnItem = indexes.itemsByTypeId.get(item.TypeID);
   const category = categorizeItem(item, cdnItem);
   const reasons: ReasonEntry[] = [];
 
   // --- 1. User overrides ---
-  const overrideKey = `${item.TypeID}_${item.StorageVault}`;
-  const nameOverride = overrides[item.Name];
-  const keyOverride = overrides[overrideKey];
-  const override = keyOverride ?? nameOverride;
+  if (!skipOverride) {
+    const overrideKey = `${item.TypeID}_${item.StorageVault}`;
+    const nameOverride = overrides[item.Name];
+    const keyOverride = overrides[overrideKey];
+    const override = keyOverride ?? nameOverride;
 
-  if (override) {
-    return {
-      action: ACTIONS[override.action],
-      reasons: [{ type: 'override', text: override.reason || 'User override', confidence: 'high' }],
-      summary: override.reason || 'User override',
-      category,
-    };
+    if (override) {
+      // Legacy guard: persisted EVALUATE overrides from before removal
+      const overrideAction = override.action === ('EVALUATE' as string) ? 'KEEP' : override.action;
+      const isLegacyEvaluate = override.action === ('EVALUATE' as string);
+      return {
+        action: ACTIONS[overrideAction],
+        reasons: [{ type: 'override', text: override.reason || 'User override', confidence: 'high' }],
+        summary: override.reason || 'User override',
+        category,
+        ...(isLegacyEvaluate && { uncertain: true }),
+      };
+    }
   }
 
   // --- 2. Quest item check ---
@@ -151,8 +158,8 @@ export function getRecommendation(
 
   // --- 5. Consumable check ---
   if (cdnItem && checkConsumable(cdnItem)) {
-    const consumableResult = analyzeConsumable(item, cdnItem, character);
-    if (consumableResult.useful) {
+    const consumableResult = analyzeConsumable(item, cdnItem, character, indexes);
+    if (consumableResult.status === 'usable') {
       return {
         action: ACTIONS.USE,
         reasons: [{
@@ -164,7 +171,32 @@ export function getRecommendation(
         category,
       };
     }
-    // Not useful consumable — may fall through to sell
+    if (consumableResult.status === 'combat_supply') {
+      return {
+        action: ACTIONS.USE_COMBAT,
+        reasons: [{
+          type: 'consumable',
+          text: consumableResult.reason,
+          confidence: 'medium',
+        }],
+        summary: consumableResult.reason,
+        category,
+      };
+    }
+    if (consumableResult.status === 'level_later') {
+      return {
+        action: ACTIONS.LEVEL_LATER,
+        reasons: [{
+          type: 'consumable',
+          text: consumableResult.reason,
+          confidence: 'medium',
+        }],
+        summary: consumableResult.reason,
+        category,
+        uncertain: true,
+      };
+    }
+    // status === 'not_useful' — fall through to gift/heuristics
   }
 
   // --- 6. NPC gift check ---
@@ -200,17 +232,19 @@ export function getRecommendation(
         ? (keepQuantities[item.Name] ?? undefined)
         : undefined,
       category,
+      ...(heuristic.uncertain && { uncertain: true }),
     };
   }
 
   // --- Ultimate fallback ---
   return {
-    action: ACTIONS.EVALUATE,
+    action: ACTIONS.KEEP,
     reasons: reasons.length > 0
       ? reasons
       : [{ type: 'fallback', text: 'Uncategorized \u2014 review manually', confidence: 'low' }],
     summary: reasons[0]?.text ?? 'Uncategorized \u2014 review manually',
     category,
+    uncertain: true,
   };
 }
 
@@ -232,12 +266,12 @@ function evaluateEquipment(
     confidence = 'medium';
   }
 
-  // If still empty after inference, EVALUATE instead of SELL_ALL
+  // If still empty after inference, keep but flag uncertain
   if (gearSkills.length === 0) {
     const rarity = item.Rarity ?? 'Common';
     const level = item.Level ?? 0;
     return {
-      action: ACTIONS.EVALUATE,
+      action: ACTIONS.KEEP,
       reasons: [{
         type: 'equipment',
         text: `${rarity} L${level} \u2014 unable to determine skills, review manually`,
@@ -246,6 +280,7 @@ function evaluateEquipment(
       summary: `${rarity} L${level} \u2014 unable to determine skills, review manually`,
       gearScore,
       category,
+      uncertain: true,
     };
   }
 
@@ -300,19 +335,20 @@ function evaluateEquipment(
       action: ACTIONS.DISENCHANT,
       reasons: [{
         type: 'equipment',
-        text: `Outleveled ${rarity} L${level} \u2014 distill for phlogiston`,
+        text: `Outleveled ${rarity} L${level} ${displayStr} \u2014 distill for phlogiston`,
         confidence,
+        detail: 'On-build gear yields relevant phlogiston; more valuable than vendor price',
       }],
-      summary: `Outleveled ${rarity} L${level} \u2014 distill for phlogiston`,
+      summary: `Outleveled ${rarity} L${level} ${displayStr} \u2014 distill for phlogiston`,
       gearScore,
       category,
     };
   }
 
-  // On-build gear that needs evaluation
+  // On-build gear that needs comparison
   if (hasBuildSkill) {
     return {
-      action: ACTIONS.EVALUATE,
+      action: ACTIONS.KEEP,
       reasons: [{
         type: 'equipment',
         text: `${rarity} L${level} ${displayStr} \u2014 compare to current gear`,
@@ -321,6 +357,7 @@ function evaluateEquipment(
       summary: `${rarity} L${level} ${displayStr} \u2014 compare to current gear`,
       gearScore,
       category,
+      uncertain: true,
     };
   }
 
@@ -330,10 +367,11 @@ function evaluateEquipment(
       action: ACTIONS.DISENCHANT,
       reasons: [{
         type: 'equipment',
-        text: `Off-build ${rarity} \u2014 good phlogiston from distilling`,
+        text: `Off-build ${rarity} ${displayStr} \u2014 good phlogiston from distilling`,
         confidence,
+        detail: 'High-rarity gear yields valuable phlogiston worth more than vendor gold',
       }],
-      summary: `Off-build ${rarity} \u2014 good phlogiston from distilling`,
+      summary: `Off-build ${rarity} ${displayStr} \u2014 good phlogiston from distilling`,
       gearScore,
       category,
     };
@@ -342,10 +380,11 @@ function evaluateEquipment(
     action: ACTIONS.SELL_ALL,
     reasons: [{
       type: 'equipment',
-      text: 'Off-build gear, no relevant skills',
+      text: `Off-build ${rarity} ${displayStr} \u2014 sell for gold`,
       confidence,
+      detail: 'Low-rarity gear yields minimal phlogiston; vendor gold is better value',
     }],
-    summary: 'Off-build gear, no relevant skills',
+    summary: `Off-build ${rarity} ${displayStr} \u2014 sell for gold`,
     gearScore,
     category,
   };
@@ -402,8 +441,37 @@ export function analyzeInventory(
   keepQuantities: Record<string, number>,
   ignoredNpcIds?: Set<string>,
 ): Array<InventoryItem & { recommendation: Recommendation }> {
-  return items.map((item) => ({
-    ...item,
-    recommendation: getRecommendation(item, character, indexes, build, overrides, keepQuantities, ignoredNpcIds),
-  }));
+  // Track how many non-stacking items have been assigned each override,
+  // so we can respect keepQuantities and let excess items fall through.
+  const overrideCounts: Record<string, number> = {};
+
+  return items.map((item) => {
+    let skipOverride = false;
+
+    const overrideKey = `${item.TypeID}_${item.StorageVault}`;
+    const nameOverride = overrides[item.Name];
+    const keyOverride = overrides[overrideKey];
+    const override = keyOverride ?? nameOverride;
+
+    if (override && item.StackSize <= 1) {
+      const keepQty = keepQuantities[item.Name];
+      if (keepQty != null) {
+        const countKey = keyOverride ? overrideKey : item.Name;
+        const assigned = overrideCounts[countKey] ?? 0;
+        if (assigned >= keepQty) {
+          skipOverride = true;
+        } else {
+          overrideCounts[countKey] = assigned + 1;
+        }
+      }
+    }
+
+    return {
+      ...item,
+      recommendation: getRecommendation(
+        item, character, indexes, build, overrides, keepQuantities,
+        ignoredNpcIds, skipOverride,
+      ),
+    };
+  });
 }
