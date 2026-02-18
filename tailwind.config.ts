@@ -31,6 +31,8 @@ export default {
           orange: '#fb923c',
           'orange-dim': '#7c2d12',
           cyan: '#22d3ee',
+          teal: '#2dd4bf',
+          'teal-dim': '#134e4a',
         },
         rarity: {
           common: '#9ca3af',
