@@ -1,4 +1,4 @@
-/** CDN quests.json — keyed by quest InternalName */
+/** CDN quests.json — CDN keys are "quest_NNNNN", quest objects have their own InternalName */
 export interface CdnQuest {
   InternalName: string;
   Name?: string;

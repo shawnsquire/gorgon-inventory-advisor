@@ -36,6 +36,8 @@ export interface GameDataIndexes {
   sourcesByItem: Map<string, CdnItemSource>;
   /** ability InternalName -> CdnAbility */
   abilitiesByInternalName: Map<string, CdnAbility>;
+  /** "Skill:DisplayName" -> CdnAbility[] for reverse lookup from item names */
+  abilitiesByDisplayNameAndSkill: Map<string, CdnAbility[]>;
   /** NPC InternalName -> CdnNpc */
   npcById: Map<string, CdnNpc>;
   /** area name -> NPC InternalNames in that area */
@@ -123,14 +125,14 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
   const questsByInternalName = new Map<string, CdnQuest>();
   const questItemRequirements = new Map<string, QuestItemReq[]>();
   for (const [key, quest] of Object.entries(quests)) {
-    questsByInternalName.set(key, quest);
+    questsByInternalName.set(quest.InternalName, quest);
     if (quest.Objectives) {
       for (const obj of quest.Objectives) {
         if (obj.Type === 'Collect' || obj.Type === 'Deliver' || obj.Type === 'Have') {
           const itemName = obj.ItemName ?? obj.Target;
           if (itemName) {
             const req: QuestItemReq = {
-              questInternalName: key,
+              questInternalName: quest.InternalName, // Must match ActiveQuests entries from Lore Exporter
               questName: quest.Name ?? key,
               itemName,
               count: obj.Number ?? 1,
@@ -169,9 +171,10 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
   }
 
   // --- TSys Power index ---
+  // CDN keys are "power_NNNNN" but inventory items reference by InternalName (e.g. "ArcheryBoost")
   const tsysPowerByInternalName = new Map<string, CdnTsysPower>();
-  for (const [key, power] of Object.entries(tsysclientinfo)) {
-    tsysPowerByInternalName.set(key, power);
+  for (const [, power] of Object.entries(tsysclientinfo)) {
+    tsysPowerByInternalName.set(power.InternalName, power);
   }
 
   // --- NPC indexes ---
@@ -224,8 +227,15 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
 
   // --- Abilities index ---
   const abilitiesByInternalName = new Map<string, CdnAbility>();
+  const abilitiesByDisplayNameAndSkill = new Map<string, CdnAbility[]>();
   for (const [key, ability] of Object.entries(abilities)) {
     abilitiesByInternalName.set(key, ability);
+    if (ability.Name && ability.Skill) {
+      const lookupKey = `${ability.Skill}:${ability.Name}`;
+      const existing = abilitiesByDisplayNameAndSkill.get(lookupKey);
+      if (existing) existing.push(ability);
+      else abilitiesByDisplayNameAndSkill.set(lookupKey, [ability]);
+    }
   }
 
   return {
@@ -243,6 +253,7 @@ export function buildIndexes(rawData: Record<CdnFileName, unknown>): GameDataInd
     vaultsByInternalName,
     sourcesByItem,
     abilitiesByInternalName,
+    abilitiesByDisplayNameAndSkill,
     npcById,
     npcsByArea,
     recipesByResultItem,
