@@ -5,9 +5,10 @@ import { useAppStore } from '@/lib/store';
 interface Props {
   itemName: string;
   overrideKey: string;
+  onClose?: () => void;
 }
 
-export function OverrideControls({ itemName, overrideKey }: Props) {
+export function OverrideControls({ itemName, overrideKey, onClose }: Props) {
   const overrides = useAppStore((s) => s.overrides);
   const setOverride = useAppStore((s) => s.setOverride);
   const clearOverride = useAppStore((s) => s.clearOverride);
@@ -30,6 +31,7 @@ export function OverrideControls({ itemName, overrideKey }: Props) {
       setKeepQuantity(itemName, parseInt(keepQty));
     }
     void persistToDb();
+    onClose?.();
   }
 
   function handleClear() {
@@ -48,7 +50,7 @@ export function OverrideControls({ itemName, overrideKey }: Props) {
 
       {/* Action buttons */}
       <div className="flex gap-1.5 flex-wrap mb-3">
-        {(Object.keys(ACTIONS) as ActionType[]).map((key) => (
+        {(Object.keys(ACTIONS) as ActionType[]).filter((key) => key !== 'ARCHIVE').map((key) => (
           <button
             key={key}
             onClick={() => setAction(key)}

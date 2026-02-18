@@ -29,7 +29,7 @@ export const ItemRow = memo(function ItemRow({ item, onItemClick, indexes }: Pro
       style={{ borderLeftWidth: 3, borderLeftColor: getActionBorderColor(rec.action.type) }}
     >
       {/* Action badge */}
-      <ActionBadge actionType={rec.action.type} />
+      <ActionBadge actionType={rec.action.type} uncertain={rec.uncertain} />
 
       {/* Item icon */}
       {cdnItem?.IconId ? (
@@ -94,12 +94,13 @@ function getActionBorderColor(actionType: string): string {
     SELL_SOME: '#fbbf24',
     DISENCHANT: '#a78bfa',
     USE: '#22d3ee',
+    USE_COMBAT: '#2dd4bf',
     QUEST: '#60a5fa',
     LEVEL_LATER: '#fb923c',
-    EVALUATE: '#6b7280',
     INGREDIENT: '#34d399',
     DEPLOY: '#22d3ee',
     GIFT: '#a78bfa',
+    ARCHIVE: '#6b7280',
   };
   return colors[actionType] ?? '#6b7280';
 }

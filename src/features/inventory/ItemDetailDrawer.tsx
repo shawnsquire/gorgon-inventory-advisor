@@ -10,10 +10,12 @@ import { GiftSection } from './sections/GiftSection';
 import { GearPowersSection } from './sections/GearPowersSection';
 import { SourcesSection } from './sections/SourcesSection';
 import { OverrideControls } from './OverrideControls';
+import { ACTIONS } from '@/types/recommendations';
+import { useAppStore } from '@/lib/store';
 import { getVaultDisplayName, formatArea, PLAYER_INVENTORY } from '@/shared/utils/friendlyNames';
 import { formatGold } from '@/shared/utils/formatting';
 import { getIconUrl } from '@/lib/cdn';
-import { getItemWikiUrl } from '@/shared/utils/itemHelpers';
+import { getWikiUrl } from '@/shared/utils/itemHelpers';
 
 interface Props {
   item: AnalyzedItem | null;
@@ -24,11 +26,18 @@ interface Props {
 }
 
 export function ItemDetailDrawer({ item, onClose, character, indexes, build }: Props) {
+  const overrides = useAppStore((s) => s.overrides);
+  const setOverride = useAppStore((s) => s.setOverride);
+  const clearOverride = useAppStore((s) => s.clearOverride);
+  const persistToDb = useAppStore((s) => s.persistToDb);
+
   if (!item) return null;
 
   const cdnItem = indexes.itemsByTypeId.get(item.TypeID);
   const rec = item.recommendation;
   const totalValue = item.Value * item.StackSize;
+  const overrideKey = `${item.TypeID}_${item.StorageVault}`;
+  const existing = overrides[item.Name] ?? overrides[overrideKey];
 
   return (
     <Drawer open={!!item} onClose={onClose} title={item.Name}>
@@ -47,7 +56,12 @@ export function ItemDetailDrawer({ item, onClose, character, indexes, build }: P
               />
             )}
             <div className="flex items-center gap-2 flex-wrap">
-              <ActionLabel actionType={rec.action.type} />
+              <ActionLabel actionType={rec.action.type} uncertain={rec.uncertain} />
+              {rec.uncertain && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-action-yellow/10 border border-action-yellow/30 text-action-yellow text-[11px] font-medium">
+                  Uncertain — review recommended
+                </span>
+              )}
               {item.Rarity && <RarityBadge rarity={item.Rarity} />}
               {item.Level && (
                 <span className="text-sm text-gorgon-text-dim">Level {item.Level}</span>
@@ -61,7 +75,7 @@ export function ItemDetailDrawer({ item, onClose, character, indexes, build }: P
           </div>
 
           <a
-            href={getItemWikiUrl(item.Name)}
+            href={getWikiUrl(item.Name)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-action-blue hover:underline mb-1"
@@ -175,7 +189,34 @@ export function ItemDetailDrawer({ item, onClose, character, indexes, build }: P
         <OverrideControls
           itemName={item.Name}
           overrideKey={`${item.TypeID}_${item.StorageVault}`}
+          onClose={onClose}
         />
+
+        {/* Archive — separate from override since it takes effect immediately */}
+        {existing?.action === 'ARCHIVE' ? (
+          <button
+            onClick={() => {
+              clearOverride(item.Name);
+              clearOverride(overrideKey);
+              void persistToDb();
+            }}
+            className="w-full px-3 py-1.5 rounded text-sm font-medium transition-colors
+                       bg-gorgon-dark border border-gorgon-border text-gorgon-text hover:text-gorgon-text-bright"
+          >
+            Unarchive
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              setOverride(item.Name, { action: 'ARCHIVE', reason: 'Manually archived' });
+              void persistToDb();
+            }}
+            className="w-full px-3 py-1.5 rounded text-sm font-medium transition-colors
+                       bg-gorgon-dark border border-gorgon-border text-gorgon-text-dim hover:text-gorgon-text"
+          >
+            {ACTIONS.ARCHIVE.icon} Archive
+          </button>
+        )}
       </div>
     </Drawer>
   );
